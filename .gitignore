@@ -1,0 +1,56 @@
+# Dependencias e instalación
+node_modules/
+.pnpm-store/
+
+# Builds y artefactos de compilación
+dist/
+build/
+*.tsbuildinfo
+
+# Cachés de herramientas
+.turbo/
+.turbo-evaluation/
+.eslintcache
+
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime de Proof
+.proof/
+
+# Tests y cobertura
+coverage/
+*.log
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Documentos, papers y material generado — nunca se versionan
+output/
+tmp/
+*.pdf
+*.docx
+*.doc
+*.pptx
+*.xlsx
+!docs/**/*.md
+
+# Imágenes/renders generados a partir de documentos
+tmp/pdfs/
+**/rendered-*/
+*.png
+*.jpg
+*.jpeg
+!docs/**/*.png
+!docs/**/*.jpg
+!.github/**/*.png

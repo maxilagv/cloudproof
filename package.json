@@ -1,0 +1,26 @@
+{
+  "name": "proof-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Evidence Plane determinista para cambios stateful — motor Node.js/PostgreSQL/Prisma",
+  "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "setup": "pnpm install && pnpm run build && node scripts/link-global.mjs",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8"
+  }
+}

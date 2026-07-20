@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../config" },
+    { "path": "../proof-schema" },
+    { "path": "../docker-executor" },
+    { "path": "../postgres-verifier" },
+    { "path": "../policy-engine" },
+    { "path": "../plugin-sdk" }
+  ]
+}

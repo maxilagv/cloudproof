@@ -1,0 +1,133 @@
+Proof Restricted Use License (PRUL) — Version 1.0
+Copyright (c) 2026 Proof contributors. Todos los derechos reservados.
+
+Este software y su documentación asociada (el "Software") no son software
+libre ni de código abierto. El Software se distribuye bajo licencia
+propietaria, sujeta a los términos y condiciones siguientes. El uso del
+Software implica la aceptación íntegra de esta licencia.
+
+1. DEFINICIONES
+
+   "Licenciante" es el titular de los derechos de autor sobre el Software,
+   identificado en el aviso de copyright de este archivo.
+
+   "Licenciatario" o "Usted" es la persona física o jurídica que instala,
+   accede o utiliza el Software.
+
+   "Uso como Producto" significa ejecutar el Software, sin modificarlo,
+   como una herramienta terminada — por ejemplo, como CLI instalada desde
+   sus artefactos de distribución oficiales, o integrada vía su interfaz
+   pública documentada (línea de comandos, servidor MCP) — para evaluar,
+   verificar o generar evidencia sobre releases propios o de un cliente
+   del Licenciatario.
+
+2. LICENCIA OTORGADA
+
+   Sujeto al cumplimiento estricto de esta licencia, el Licenciante otorga
+   al Licenciatario una licencia limitada, no exclusiva, no transferible,
+   revocable y libre de regalías para:
+
+   (a) instalar y ejecutar el Software, sin modificaciones, únicamente
+       para Uso como Producto, dentro de su propia organización o para
+       clientes a los que el Licenciatario presta servicio; y
+
+   (b) realizar copias del Software estrictamente necesarias para dicha
+       instalación y ejecución (por ejemplo, en entornos de CI/CD propios).
+
+   Esta licencia no otorga ningún derecho no listado expresamente en esta
+   sección. Todo derecho no concedido explícitamente queda reservado al
+   Licenciante.
+
+3. RESTRICCIONES
+
+   Salvo autorización previa y por escrito del Licenciante, el
+   Licenciatario NO PUEDE:
+
+   (a) modificar, adaptar, traducir, decompilar, aplicar ingeniería
+       inversa, desensamblar ni intentar de ninguna otra forma derivar el
+       código fuente del Software a partir de sus artefactos distribuidos,
+       salvo en la medida en que dicha restricción esté expresamente
+       prohibida por ley aplicable de forma imperativa;
+
+   (b) crear obras derivadas basadas en el Software;
+
+   (c) redistribuir, revender, sublicenciar, alquilar, prestar o
+       transferir el Software o el acceso a él, sea en forma gratuita u
+       onerosa, a un tercero;
+
+   (d) ofrecer el Software, en todo o en parte, como un servicio alojado
+       (SaaS) o gestionado a terceros ajenos a la propia organización del
+       Licenciatario;
+
+   (e) utilizar el Software, su código fuente o su documentación técnica
+       para desarrollar, entrenar o mejorar un producto o servicio que
+       compita, directa o indirectamente, con el Software;
+
+   (f) eliminar, ocultar o alterar avisos de copyright, marcas, atribución
+       o esta licencia en cualquier copia del Software; ni
+
+   (g) utilizar el nombre "Proof", sus marcas asociadas o las de sus
+       contribuyentes con fines promocionales sin autorización previa por
+       escrito.
+
+4. CÓDIGO FUENTE Y CONTRIBUCIONES
+
+   El hecho de que el código fuente del Software sea visible o esté
+   disponible en un repositorio no constituye una licencia de código
+   abierto ni implica ningún derecho de uso más allá de lo establecido en
+   la Sección 2. La disponibilidad del código fuente tiene fines de
+   transparencia, auditoría de seguridad y revisión por pares, no de
+   redistribución o reutilización.
+
+   Las contribuciones aceptadas por el Licenciante se rigen por los
+   términos adicionales descritos en CONTRIBUTING.md.
+
+5. PROPIEDAD
+
+   El Software es y seguirá siendo propiedad exclusiva del Licenciante.
+   Esta licencia no transfiere ningún derecho de propiedad intelectual
+   sobre el Software al Licenciatario.
+
+6. TERMINACIÓN
+
+   Esta licencia termina automáticamente, sin necesidad de aviso previo,
+   ante cualquier incumplimiento de sus términos. Al terminar, el
+   Licenciatario debe cesar todo uso del Software y destruir todas las
+   copias en su posesión.
+
+7. SIN GARANTÍA
+
+   EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO,
+   EXPRESA O IMPLÍCITA, INCLUYENDO SIN LIMITACIÓN LAS GARANTÍAS DE
+   COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO
+   INFRACCIÓN. Proof es una herramienta de evidencia, no un sustituto del
+   juicio humano: un veredicto `VERIFIED` no constituye garantía de
+   ausencia de defectos, y la responsabilidad final de aprobar un release
+   sigue siendo del Licenciatario.
+
+8. LIMITACIÓN DE RESPONSABILIDAD
+
+   EN NINGÚN CASO EL LICENCIANTE SERÁ RESPONSABLE POR DAÑOS DIRECTOS,
+   INDIRECTOS, INCIDENTALES, ESPECIALES, EJEMPLARES O CONSECUENTES
+   (INCLUYENDO, SIN LIMITACIÓN, PÉRDIDA DE DATOS, INTERRUPCIÓN DE
+   NEGOCIO O PÉRDIDA DE GANANCIAS) DERIVADOS DEL USO O LA IMPOSIBILIDAD
+   DE USO DEL SOFTWARE, AUN CUANDO SE HAYA ADVERTIDO DE LA POSIBILIDAD
+   DE TALES DAÑOS.
+
+9. LEY APLICABLE
+
+   Esta licencia se rige por las leyes de la República Argentina, sin
+   perjuicio de sus reglas de conflicto de leyes. Cualquier disputa se
+   someterá a los tribunales competentes de dicha jurisdicción.
+
+10. VIGENCIA
+
+   El Licenciante se reserva el derecho de publicar versiones futuras del
+   Software bajo términos de licencia distintos. Esta licencia rige
+   exclusivamente la versión del Software a la que está adjunta.
+
+---
+
+Para solicitar permisos adicionales (redistribución, uso como base de un
+producto derivado, licenciamiento comercial ampliado), contactar al
+Licenciante a través de los canales indicados en el repositorio.

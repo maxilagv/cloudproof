@@ -1,0 +1,44 @@
+{
+  "name": "@proof/cli",
+  "version": "0.0.1",
+  "description": "CLI del Evidence Plane determinista de Proof",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "bin": {
+    "proof": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@proof/config": "workspace:*",
+    "@proof/docker-executor": "workspace:*",
+    "@proof/http-recorder": "workspace:*",
+    "@proof/plugin-github-actions": "workspace:*",
+    "@proof/plugin-node": "workspace:*",
+    "@proof/plugin-postgres": "workspace:*",
+    "@proof/plugin-prisma": "workspace:*",
+    "@proof/plugin-sdk": "workspace:*",
+    "@proof/policy-engine": "workspace:*",
+    "@proof/postgres-verifier": "workspace:*",
+    "@proof/schema": "workspace:*",
+    "commander": "^13.0.0",
+    "semver": "^7.7.0",
+    "yaml": "^2.9.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/semver": "^7.7.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.7"
+  }
+}
