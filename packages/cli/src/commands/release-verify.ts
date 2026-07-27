@@ -13,6 +13,7 @@ import { ComposeExecutor } from "@proof/docker-executor";
 import { evaluatePolicies, getPolicy, type PolicyViolation } from "@proof/policy-engine";
 import { COMPLETE_RELEASE_MATRIX_STATES, type ProofBundle } from "@proof/schema";
 import { conclusionBadge, paint, startSpinner } from "../ui.js";
+import { createWorktreeSnapshot } from "../worktree-snapshot.js";
 
 /**
  * Ver tesis, sección 19.2 (user story principal) y 19.3 (flujo técnico).
@@ -23,7 +24,8 @@ export interface ReleaseVerifyOptions {
   json?: boolean;
   cwd?: string;
   baseSha: string;
-  headSha: string;
+  headSha?: string;
+  worktree?: boolean;
   service?: string;
   profile?: ExecutionProfile;
   /** Canal de salida inyectable; MCP usa un sink para no corromper stdio. */
@@ -63,6 +65,18 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
   const requestedProfile =
     options.profile === undefined ? undefined : ExecutionProfileSchema.parse(options.profile);
   const executionProfile = resolveExecutionProfile(requestedProfile);
+  if (options.worktree === true && options.headSha !== undefined) {
+    throw new Error("Usa --head-sha o --worktree, no ambos.");
+  }
+  if (options.worktree !== true && options.headSha === undefined) {
+    throw new Error("Falta el candidato: usa --head-sha <sha> o --worktree.");
+  }
+  if (options.worktree === true && executionProfile !== "trusted") {
+    throw new Error("--worktree solo está permitido con el perfil trusted; internal/fork requieren un commit candidato publicado.");
+  }
+  const snapshot = options.worktree === true ? await createWorktreeSnapshot(cwd) : undefined;
+  const headSha = snapshot?.headSha ?? options.headSha;
+  if (headSha === undefined) throw new Error("No se pudo resolver el snapshot candidato.");
   const config = await loadConfig(cwd, { executionProfile });
   const service = selectService(config, options.service);
   // Validar policies antes del trabajo caro para no descubrir un id futuro o
@@ -92,7 +106,7 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
     options.json === true
       ? { update() {}, stop() {} }
       : startSpinner(
-          `release verify ${paint.dim(`${options.baseSha.slice(0, 12)} → ${options.headSha.slice(0, 12)}`)} — construyendo imágenes y ejecutando la matriz…`,
+          `release verify ${paint.dim(`${options.baseSha.slice(0, 12)} → ${headSha.slice(0, 12)}`)} — construyendo imágenes y ejecutando la matriz…`,
         );
 
   let bundle: ProofBundle;
@@ -100,7 +114,7 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
     bundle = await verifyRelease(
       {
         baseSha: options.baseSha,
-        headSha: options.headSha,
+        headSha,
         serviceName: service.name,
         servicePath: service.config.path,
         ...(service.config.port === undefined ? {} : { servicePort: service.config.port }),
@@ -110,6 +124,9 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
         ...(service.config.dockerfile === undefined
           ? {}
           : { serviceDockerfile: service.config.dockerfile }),
+        ...(service.config.dockerfileFrom === undefined
+          ? {}
+          : { serviceDockerfileFrom: service.config.dockerfileFrom }),
         ...(service.config.buildContext === undefined
           ? {}
           : { serviceBuildContext: service.config.buildContext }),
@@ -136,6 +153,9 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
                 },
               },
             }),
+        ...(config.fixtures?.bootstrapSql === undefined
+          ? {}
+          : { bootstrapSql: config.fixtures.bootstrapSql }),
         ...(config.coverage === undefined
           ? {}
           : { requiredRoutes: config.coverage.requiredRoutes }),
@@ -148,6 +168,8 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
           ...(approval.expiresAt === undefined ? {} : { expiresAt: approval.expiresAt }),
         })),
         executionProfile,
+        candidateSource: snapshot?.source ?? "commit",
+        ...(snapshot === undefined ? {} : { candidateParentSha: snapshot.parentSha }),
       },
       executor,
     );
@@ -210,6 +232,16 @@ export function renderHumanReport(
   );
   lines.push("");
   lines.push(`${paint.bold("RELEASE PROOF:")} ${conclusionBadge(bundle.conclusion)}`);
+  const candidateSource = bundle.provenance.artifacts.find((artifact) =>
+    artifact.startsWith("candidate-source="),
+  );
+  if (candidateSource === "candidate-source=synthetic-worktree-commit") {
+    lines.push(
+      paint.yellow(
+        `Candidate provenance: immutable development snapshot ${bundle.subject.headSha.slice(0, 12)} (branch and staging were not modified).`,
+      ),
+    );
+  }
 
   const failing = bundle.assertions.filter(
     (a) => a.result === "fail" && a.id !== "workload.baseline" && a.approval === undefined,
@@ -255,6 +287,18 @@ export function renderHumanReport(
       lines.push(
         "Coverage universe is unknown. Declare `coverage.requiredRoutes` in proof.config.ts.",
       );
+    } else if ((bundle.coverage.changedRoutesMissing?.length ?? 0) > 0) {
+      lines.push(
+        "Change coverage is incomplete: the workload did not exercise the HTTP route(s) modified by this diff.",
+      );
+      for (const route of bundle.coverage.changedRoutesMissing ?? []) {
+        lines.push(`Changed route without traffic: ${route}`);
+      }
+      lines.push(
+        "Release mechanics may be safe, but Proof cannot claim that the modified feature works.",
+      );
+    } else if (bundle.coverage.changeSource === "unknown") {
+      lines.push("Change coverage is unknown because the release diff could not be analyzed completely.");
     } else if (bundle.coverage.complete === false) {
       lines.push("Required route coverage is incomplete; inspect skipped coverage assertions.");
     } else {
@@ -313,7 +357,10 @@ export function renderHumanReport(
     lines.push(`${paint.red(`[policy] ${violation.policyId}:`)} ${violation.message}`);
   }
 
-  const matrixCells = renderMatrixCells(bundle.assertions);
+  const matrixCells = renderMatrixCells(
+    bundle.assertions,
+    bundle.provenance.artifacts.find((artifact) => artifact.startsWith("matrix=")),
+  );
   if (matrixCells.length > 0) {
     lines.push("", paint.bold("Matriz de ejecución:"), ...matrixCells);
   }
@@ -329,12 +376,21 @@ export function renderHumanReport(
  * Un fallo aprobado no tiñe la celda de FAIL: la approval ya se listó
  * arriba como APPROVED CHANGE.
  */
-export function renderMatrixCells(assertions: ProofBundle["assertions"]): string[] {
+export function renderMatrixCells(
+  assertions: ProofBundle["assertions"],
+  matrixProfile?: string,
+): string[] {
   if (!assertions.some((assertion) => assertion.state !== undefined)) return [];
+  const targeted = matrixProfile === "matrix=TARGETED_RELEASE_MATRIX";
+  const targetedStates = new Set(["BUILD_A0", "BUILD_A1", "A0_S0", "A1_S0", "SQL_EFFECTS"]);
   return COMPLETE_RELEASE_MATRIX_STATES.map((state) => {
     const cell = assertions.filter((assertion) => assertion.state === state);
     const label = `  ${state.padEnd(28)}`;
-    if (cell.length === 0) return `${label}${paint.dim("sin evidencia")}`;
+    if (cell.length === 0) {
+      return targeted && !targetedStates.has(state)
+        ? `${label}${paint.dim("NOT REQUIRED (schema diff = 0)")}`
+        : `${label}${paint.dim("sin evidencia")}`;
+    }
     if (cell.some((a) => a.result === "fail" && a.approval === undefined)) {
       return `${label}${paint.red("FAIL")}`;
     }

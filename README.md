@@ -47,6 +47,8 @@ proof release verify --base-sha <deployed-sha> --head-sha <candidate-sha>
 
 `release plan` corre con presupuesto acotado e inspecciona Git, configuración, historial de migraciones, Prisma, SQL, build, dependencias, runtime y CI. Su veredicto **siempre** es `PLAN_ONLY_NOT_VERIFIED`: elige el siguiente nivel de evidencia necesario, pero jamás se hace pasar por una demostración de seguridad. Es una decisión de diseño deliberada: el análisis estático no puede — y no debería — declararse a sí mismo suficiente.
 
+Los findings de Prisma salen de un **diff semántico de modelos y campos parseados**, no de líneas tocadas: re-alinear el espaciado, reordenar atributos o mover un campo dentro del bloque no genera ningún finding. `PRISMA_REQUIRED_FIELD_ADDED` exige que el campo NO exista en el modelo base; volver requerido un campo que era opcional se reporta aparte como `PRISMA_FIELD_MADE_REQUIRED`, y la unicidad (`@unique`/`@@unique`) solo cuenta cuando es semánticamente nueva.
+
 ### 2. Construye la matriz de transición completa, no un smoke test
 
 `release verify` levanta contenedores reales para A0 (versión desplegada) y A1 (versión candidata) y ejecuta, en orden:
@@ -62,6 +64,10 @@ proof release verify --base-sha <deployed-sha> --head-sha <candidate-sha>
 | 7 | Comparación | Respuestas HTTP normalizadas y efectos SQL observables, celda por celda |
 
 El resultado final es siempre uno de tres: **`VERIFIED`**, **`UNSAFE`** o **`INCONCLUSIVE`** — nunca un color verde ambiguo. Cada veredicto viene acompañado de coverage, provenance, assertions individuales, `remediation` determinista y `nextActions` tipadas y accionables. `INCONCLUSIVE` está diseñado para **no** poder confundirse con "seguro": una aprobación final sigue siendo, siempre, una decisión humana.
+
+La matriz es **adaptativa pero fail-closed**. Si el diff toca migraciones, Prisma, SQL, una superficie de riesgo alto o el análisis queda incompleto, se ejecutan todas las celdas anteriores. Si el diff es exclusivamente de aplicación y el schema diff es cero, el plan exige una matriz enfocada (`BUILD_A0`, `BUILD_A1`, `A0_S0`, `A1_S0`, `SQL_EFFECTS`): no repite S0 como si fuera un S1 distinto. El Bundle registra `matrix=TARGETED_RELEASE_MATRIX` y la assertion `proof.execution-complete` enumera por qué las celdas de migración/coexistencia/rollback no eran obligatorias.
+
+Coverage también es consciente del cambio. Proof deriva rutas de entrypoints modificados (por ahora Next.js App Router y Pages API), extrae sus métodos y cruza esa superficie con el tráfico capturado. Una configuración puede cubrir `2/2` rutas declaradas y aun así terminar `INCONCLUSIVE` si el endpoint realmente modificado recibió cero tráfico; `coverage.changedRoutesMissing` y una assertion `coverage.changed-route.*` hacen visible esa diferencia.
 
 ### 3. Genera su propio workload cuando el repo no tiene uno
 
@@ -82,13 +88,15 @@ fixtures: {
 - Si el fixture falla, el veredicto es honestamente `INCONCLUSIVE`, con la assertion `workload.fixtures` y una `nextAction` accionable. El workload ni siquiera se ejecuta.
 - No existe `afterAll` a propósito: los entornos son efímeros y el executor los destruye siempre.
 
+Para apps **sin registro público** (el primer usuario no puede crearse por HTTP), `fixtures.bootstrapSql` declara un `.sql` del repo que Proof aplica una sola vez, dentro del contenedor Postgres, después de `migrate deploy` del commit base y antes de arrancar cualquier app. Es preparación de entorno — análoga a una migración — así que la regla "las escrituras del workload son HTTP observables" queda intacta: todas las celdas heredan el bootstrap por clonación del seed S0 y su digest sha256 queda en el Bundle (`postgres.bootstrap`). El patrón completo: sembrar el usuario con un hash literal en el SQL y obtener el token con el login HTTP real en `fixtures.beforeAll`. Y para el onboarding a Docker — el candidato agrega el Dockerfile que el commit base desplegado no tiene — `services.<n>.dockerfileFrom: "head"` construye ambos lados con la receta del candidato manteniendo las fuentes de cada commit; la procedencia queda registrada en la evidencia de `BUILD_A0`.
+
 ### 5. Bundles firmados, no solo logs
 
 `proof bundle keygen/sign/verify/inspect` firma el payload canónico (RFC 8785) con Ed25519, usando encoding DSSE PAE y un attestation separado del payload. Sin clave pública configurada, Proof reporta **integridad** (el bundle no fue alterado) — nunca **confianza** (que el firmante sea quien decís que es). Esa distinción es explícita en el diseño, no un detalle de implementación.
 
 ### 6. `proof doctor`: falla rápido y con motivo
 
-Valida runtime, Docker, espacio en disco, historial de Git, secretos versionados por error, configuración, workload, coverage y approvals declaradas. Devuelve código de salida `1` en cuanto encuentra un problema `HIGH` o `CRITICAL` — pensado para bloquear CI antes de gastar tiempo en levantar contenedores.
+Valida runtime, Docker, espacio en disco, historial de Git, secretos versionados por error, configuración, workload, coverage y approvals declaradas. Las variables ausentes de `.env.example` se clasifican por evidencia de uso: lecturas requeridas con archivo/línea primero, usos condicionales después y claves no referenciadas como un resumen sin volcar una lista ruidosa. `env.required`/`env.optional` permite corregir explícitamente la heurística. Incluye además un preflight estático de runtime de imagen — si el servicio usa Prisma y la etapa final del Dockerfile es Alpine o Debian slim sin OpenSSL, el problema aparece acá con la receta exacta (`apk add --no-cache openssl` / `apt-get install openssl`), no a los minutos de un build fallido; el análisis entiende multi-stage y solo cuenta lo que llega a la imagen final. También vigila que `.proof/` esté ignorado (evidencia versionada en Git es `HIGH`) y avisa cuando el spec OpenAPI exige identidad sin `fixtures.beforeAll`. Devuelve código de salida `1` en cuanto encuentra un problema `HIGH` o `CRITICAL` — pensado para bloquear CI antes de gastar tiempo en levantar contenedores.
 
 ### 7. Perfiles endurecidos para código no confiable
 
@@ -115,7 +123,7 @@ proof doctor    # valida el entorno antes de gastar tiempo de Docker
 proof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
 ```
 
-`proof init` respeta `.gitignore`, detecta servicios construibles, distingue Node.js de Next.js, y genera `proof.config.ts`, `proof.config.json` y un bloque gestionado dentro de `AGENTS.md`.
+`proof init` respeta `.gitignore`, detecta servicios construibles, distingue Node.js de Next.js, y genera `proof.config.ts`, `proof.config.json` y un bloque gestionado dentro de `AGENTS.md`. El código generado nunca se confunde con un servicio: los `output` de los generators Prisma y los directorios `generated`/`__generated__` se excluyen y cada descarte se reporta con su evidencia (el cliente Prisma emitido en `src/generated/prisma` trae su propio `package.json` y una copia de `schema.prisma`, pero no es una aplicación). Además `init` agrega `.proof/` a `.gitignore` de forma idempotente y, si el spec OpenAPI declara operaciones autenticadas con un login público que devuelve token, scaffoldea `proof.fixtures.mjs` (identidad vía `PROOF_BASE_URL`, token exportado por `PROOF_FIXTURE_ENV`); sin esa evidencia, reporta el gap en lugar de inventar rutas.
 
 ### Configuración mínima
 
@@ -192,7 +200,7 @@ Proof no intenta adivinar invariantes de negocio. *"Dos períodos no pueden abri
 
 Tampoco reemplaza un linter completo de migraciones como Atlas. El fast path consume y clasifica evidencia estática; lo que diferencia a Proof es unir esa evidencia con evidencia **dinámica** de qué versiones, datos, flujos y escrituras se ejecutaron realmente.
 
-Hoy `release verify` necesita dos snapshots de Git: el SHA desplegado y el candidato. Inferir "la cadena sin la última migración" responde una pregunta local distinta y no demuestra cuál aplicación está efectivamente desplegada. Un flujo para árboles sucios puede agregarse como nivel de desarrollo, pero nunca puede fingir provenance de release.
+Un release publicado sigue usando dos commits: el SHA desplegado y el candidato. Para iterar sin crear commits descartables, `proof release plan|verify --base-sha <deployed> --worktree` congela el contenido visible —incluidos archivos no trackeados y no ignorados— mediante un índice temporal y `git commit-tree`. No mueve `HEAD`, no toca el staging ni dispara hooks; el SHA sintético es inmutable y reutilizable por cache. El Bundle lo declara como `candidate.source=synthetic-worktree-commit` y `developmentOnly=true`: demuestra ese snapshot exacto para desarrollo, pero no autoriza por sí solo un merge/deploy. El gate final debe verificar el commit publicado.
 
 ---
 

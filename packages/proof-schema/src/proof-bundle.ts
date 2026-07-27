@@ -117,6 +117,11 @@ export const CoverageSchema = z.object({
   routesRequired: z.number().int().nonnegative().optional(),
   source: z.enum(["declared", "unknown", "legacy"]).optional(),
   complete: z.boolean().optional(),
+  /** Coverage of HTTP route entrypoints derived from the release diff. */
+  changedRoutesDetected: z.number().int().nonnegative().optional(),
+  changedRoutesObserved: z.number().int().nonnegative().optional(),
+  changedRoutesMissing: z.array(z.string().min(1).max(2_048)).max(2_000).optional(),
+  changeSource: z.enum(["diff-inferred", "not-applicable", "unknown"]).optional(),
 });
 
 export const CoverageV2Schema = z
@@ -126,6 +131,10 @@ export const CoverageV2Schema = z
     routesRequired: z.number().int().nonnegative(),
     source: z.enum(["declared", "unknown", "legacy"]),
     complete: z.boolean(),
+    changedRoutesDetected: z.number().int().nonnegative().optional(),
+    changedRoutesObserved: z.number().int().nonnegative().optional(),
+    changedRoutesMissing: z.array(z.string().min(1).max(2_048)).max(2_000).optional(),
+    changeSource: z.enum(["diff-inferred", "not-applicable", "unknown"]).optional(),
   })
   .strict()
   .superRefine((coverage, context) => {
@@ -148,6 +157,13 @@ export const CoverageV2Schema = z
         code: z.ZodIssueCode.custom,
         path: ["source"],
         message: "Unknown coverage cannot be complete",
+      });
+    }
+    if ((coverage.changedRoutesMissing?.length ?? 0) > 0 && coverage.complete) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["changedRoutesMissing"],
+        message: "Coverage cannot be complete while a changed HTTP route is unobserved",
       });
     }
   });
@@ -179,6 +195,14 @@ export const ProvenanceV1Schema = z.object({
     .optional(),
   /** Ausente cuando la corrida no registró sondas ni reintentos. */
   executorAttempts: z.array(ExecutorAttemptSchema).max(500).optional(),
+  candidate: z
+    .object({
+      source: z.enum(["commit", "clean-worktree", "synthetic-worktree-commit"]),
+      parentSha: z.string().min(1).optional(),
+      /** Synthetic worktree receipts are iteration evidence, not merge/deploy authorization. */
+      developmentOnly: z.boolean(),
+    })
+    .optional(),
 });
 
 /** Historical export retained for current producers. */
@@ -1489,6 +1513,9 @@ export function deriveConclusion(
   }
   if (coverage.routesObserved === 0) return "INCONCLUSIVE";
   if (coverage.complete === false || coverage.source === "unknown") return "INCONCLUSIVE";
+  if (coverage.changeSource === "unknown" || (coverage.changedRoutesMissing?.length ?? 0) > 0) {
+    return "INCONCLUSIVE";
+  }
   if (mandatory.some((assertion) => assertion.result === "skipped")) return "INCONCLUSIVE";
   if (mandatory.length === 0) return "INCONCLUSIVE";
   return "VERIFIED";

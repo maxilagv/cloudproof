@@ -328,7 +328,7 @@ describe("proof doctor", () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": JSON.stringify({ engines: { node: ">=18" } }),
-      Dockerfile: "FROM node:20-alpine\n",
+      Dockerfile: "FROM node:20-alpine\nRUN apk add --no-cache openssl\n",
       "prisma/schema.prisma":
         'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
       "proof.config.ts": `export default {
@@ -421,6 +421,43 @@ describe("proof doctor", () => {
     expect(messages).toContain("falta Dockerfile");
     expect(messages).toContain("docker/Dockerfile.api");
     expect(messages).toContain("services.api.dockerfile");
+  });
+});
+
+describe("proof doctor env relevance", () => {
+  it("prioriza variables usadas por verify y resume las ajenas sin listarlas", async () => {
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const unrelated = Array.from({ length: 23 }, (_, index) => `UNRELATED_${index}=x`).join("\n");
+    const root = repo({
+      ".env.example": `RUNTIME_TOKEN=x\n${unrelated}\n`,
+      "package.json": JSON.stringify({ engines: { node: ">=18" } }),
+      Dockerfile: "FROM node:20-alpine\n",
+      "src/index.ts": "export const token = process.env.RUNTIME_TOKEN;\n",
+      "prisma/schema.prisma":
+        'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
+      "scripts/e2e.mjs": "fetch(process.env.PROOF_BASE_URL + '/orders');\n",
+      "proof.config.ts": `export default {
+  services: { api: { kind: "node", path: "." } },
+  data: { postgres: { kind: "postgres", version: 16 } },
+  flows: [],
+  release: { strategy: "migration-first", rollback: "application" },
+  policies: [],
+  workload: { command: "node", args: ["scripts/e2e.mjs"] },
+  coverage: { requiredRoutes: ["GET /orders"] },
+  approvals: [],
+};\n`,
+    });
+
+    const findings = await runDoctor({ cwd: root, systemChecks: false });
+    const relevant = findings.find((finding) => finding.message.includes("lecturas sin fallback"));
+    const noise = findings.find((finding) => finding.message.includes("evitar ruido"));
+
+    expect(relevant).toMatchObject({ severity: "MEDIUM" });
+    expect(relevant?.message).toContain("RUNTIME_TOKEN");
+    expect(relevant?.message).not.toContain("UNRELATED_0");
+    expect(noise).toMatchObject({ severity: "LOW" });
+    expect(noise?.message).toContain("23 variable(s)");
+    expect(noise?.message).not.toContain("UNRELATED_0");
   });
 });
 

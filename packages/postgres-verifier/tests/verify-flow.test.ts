@@ -1,5 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   ExecutorError,
   type CommandRunner,
@@ -42,15 +45,19 @@ function harness(
   const events: string[] = [];
   const effects = new Map<string, number>();
   const schemaByDatabase = new Map<string, string>();
+  const schemaLabelByDatabase = new Map<string, "S0" | "S1">();
   const servers = new Map<string, Server>();
   let postgresCount = 0;
   let appCount = 0;
   let unsafeConsumed = false;
+  let baseImage: string | undefined;
 
   const executor: DockerExecutor = {
     async buildImage(spec) {
       events.push(`build:${spec.sha}`);
-      return `image:${spec.sha}`;
+      const image = `image:${spec.sha}`;
+      baseImage ??= image;
+      return image;
     },
     async imageDigest(imageTag) {
       return `sha256:${imageTag}`;
@@ -69,6 +76,7 @@ function harness(
           : (effects.get(spec.cloneFromContainerId) ?? 0),
       );
       schemaByDatabase.set(id, spec.migrationsUpToSha);
+      schemaLabelByDatabase.set(id, spec.label);
       return { id, serviceName: id, connectionUrl: `db://${id}` };
     },
     async startApp(imageTag, env): Promise<RunningContainer> {
@@ -79,8 +87,8 @@ function harness(
       const injectUnsafe =
         options.unsafeReplay === true &&
         !unsafeConsumed &&
-        imageTag === "image:base" &&
-        schemaByDatabase.get(databaseId) === "head";
+        imageTag === baseImage &&
+        schemaLabelByDatabase.get(databaseId) === "S1";
       if (injectUnsafe) unsafeConsumed = true;
       const server = createServer((request, response) => {
         response.setHeader("content-type", "application/json");
@@ -194,10 +202,11 @@ async function run(
   approvals: VerifyApproval[] = [],
   requiredRoutes: string[] | null = ["POST /orders"],
 ) {
+  const subjectSha = git(process.cwd(), ["rev-parse", "HEAD"]);
   return verifyRelease(
     {
-      baseSha: "base",
-      headSha: "head",
+      baseSha: subjectSha,
+      headSha: subjectSha,
       serviceName: "api",
       servicePath: ".",
       runner: "unit",
@@ -299,8 +308,8 @@ describe("verifyRelease state machine", () => {
 
     await verifyRelease(
       {
-        baseSha: "base",
-        headSha: "head",
+        baseSha: git(process.cwd(), ["rev-parse", "HEAD"]),
+        headSha: git(process.cwd(), ["rev-parse", "HEAD"]),
         serviceName: "api",
         servicePath: ".",
         runner: "unit",
@@ -344,13 +353,255 @@ describe("verifyRelease state machine", () => {
   });
 });
 
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+}
+
+/**
+ * Repo git real con dos commits: "base" crea una tabla, "head" agrega una
+ * migración nueva con un DROP TABLE. `planRelease` solo puede clasificar
+ * DDL destructivo leyendo diffs git de verdad — a diferencia del resto de
+ * este archivo, que usa los SHAs sintéticos "base"/"head" porque nunca
+ * necesitó que el triage estático resolviera nada.
+ */
+function createDestructiveMigrationRepo(): { repoRoot: string; baseSha: string; headSha: string } {
+  const repoRoot = mkdtempSync(join(tmpdir(), "proof-triage-"));
+  git(repoRoot, ["init", "-q"]);
+  git(repoRoot, ["config", "user.email", "proof-tests@example.com"]);
+  git(repoRoot, ["config", "user.name", "Proof Tests"]);
+
+  mkdirSync(join(repoRoot, "migrations", "0001_init"), { recursive: true });
+  writeFileSync(
+    join(repoRoot, "migrations", "0001_init", "migration.sql"),
+    "CREATE TABLE orders (id serial primary key);\n",
+    "utf-8",
+  );
+  git(repoRoot, ["add", "."]);
+  git(repoRoot, ["commit", "-q", "-m", "base"]);
+  const baseSha = git(repoRoot, ["rev-parse", "HEAD"]);
+
+  mkdirSync(join(repoRoot, "migrations", "0002_drop"), { recursive: true });
+  writeFileSync(
+    join(repoRoot, "migrations", "0002_drop", "migration.sql"),
+    'DROP TABLE "orders";\n',
+    "utf-8",
+  );
+  git(repoRoot, ["add", "."]);
+  git(repoRoot, ["commit", "-q", "-m", "head"]);
+  const headSha = git(repoRoot, ["rev-parse", "HEAD"]);
+
+  return { repoRoot, baseSha, headSha };
+}
+
+describe("V-2: gate estático de riesgo crítico antes de Docker (auditoría 2026-07-20)", () => {
+  it("un DROP detectado por triage estático corta a UNSAFE sin construir imágenes", async () => {
+    const { repoRoot, baseSha, headSha } = createDestructiveMigrationRepo();
+    try {
+      const scenario = harness();
+      const bundle = await verifyRelease(
+        {
+          baseSha,
+          headSha,
+          serviceName: "api",
+          servicePath: ".",
+          runner: "unit",
+          cwd: repoRoot,
+          workload: { command: "test-workload" },
+          requiredRoutes: ["POST /orders"],
+          approvals: [],
+        },
+        scenario.executor,
+        scenario.workload,
+      );
+
+      expect(bundle.conclusion).toBe("UNSAFE");
+      const staticAssertion = bundle.assertions.find((item) =>
+        item.id.startsWith("postgres.static.destructive-ddl-"),
+      );
+      expect(staticAssertion).toMatchObject({ result: "fail", mandatory: true });
+      expect(staticAssertion?.evidence.join("\n")).toContain("DDL destructivo detectado");
+      // Fail-fast: el hallazgo estático corta antes de tocar Docker.
+      expect(scenario.events.some((event) => event.startsWith("build:"))).toBe(false);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("una approval explícita sobre el hallazgo estático permite continuar la matriz", async () => {
+    const { repoRoot, baseSha, headSha } = createDestructiveMigrationRepo();
+    try {
+      const probe = harness();
+      const firstPass = await verifyRelease(
+        {
+          baseSha,
+          headSha,
+          serviceName: "api",
+          servicePath: ".",
+          runner: "unit",
+          cwd: repoRoot,
+          workload: { command: "test-workload" },
+          requiredRoutes: ["POST /orders"],
+          approvals: [],
+        },
+        probe.executor,
+        probe.workload,
+      );
+      const staticAssertionId = firstPass.assertions.find((item) =>
+        item.id.startsWith("postgres.static.destructive-ddl-"),
+      )?.id;
+      expect(staticAssertionId).toBeDefined();
+
+      const scenario = harness();
+      const bundle = await verifyRelease(
+        {
+          baseSha,
+          headSha,
+          serviceName: "api",
+          servicePath: ".",
+          runner: "unit",
+          cwd: repoRoot,
+          workload: { command: "test-workload" },
+          requiredRoutes: ["POST /orders"],
+          approvals: [
+            {
+              assertionId: staticAssertionId as string,
+              reason: "DROP intencional, tabla ya vacía y retirada",
+            },
+          ],
+        },
+        scenario.executor,
+        scenario.workload,
+      );
+
+      const approved = bundle.assertions.find((item) => item.id === staticAssertionId);
+      expect(approved?.approval).toBeDefined();
+      // Con la approval puesta, la matriz sí llega a construir imágenes.
+      expect(scenario.events.some((event) => event.startsWith("build:"))).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+function createAppRouteRepo(route: string): { repoRoot: string; baseSha: string; headSha: string } {
+  const repoRoot = mkdtempSync(join(tmpdir(), "proof-route-"));
+  git(repoRoot, ["init", "-q"]);
+  git(repoRoot, ["config", "user.email", "proof-tests@example.com"]);
+  git(repoRoot, ["config", "user.name", "Proof Tests"]);
+  const routeDirectory = join(repoRoot, "src", "app", ...route.split("/"));
+  mkdirSync(routeDirectory, { recursive: true });
+  writeFileSync(
+    join(routeDirectory, "route.ts"),
+    "export async function POST() { return Response.json({ version: 0 }); }\n" +
+      "export async function GET() { return Response.json({ version: 0 }); }\n",
+    "utf-8",
+  );
+  git(repoRoot, ["add", "."]);
+  git(repoRoot, ["commit", "-q", "-m", "base"]);
+  const baseSha = git(repoRoot, ["rev-parse", "HEAD"]);
+  writeFileSync(
+    join(routeDirectory, "route.ts"),
+    "export async function POST() { return Response.json({ version: 1 }); }\n" +
+      "export async function GET() { return Response.json({ version: 1 }); }\n",
+    "utf-8",
+  );
+  git(repoRoot, ["add", "."]);
+  git(repoRoot, ["commit", "-q", "-m", "candidate"]);
+  return { repoRoot, baseSha, headSha: git(repoRoot, ["rev-parse", "HEAD"]) };
+}
+
+describe("change-aware coverage and adaptive matrix", () => {
+  it("blocks VERIFIED when the changed endpoint received no traffic", async () => {
+    const repo = createAppRouteRepo("api/catalogo/inline");
+    try {
+      const scenario = harness();
+      const bundle = await verifyRelease(
+        {
+          baseSha: repo.baseSha,
+          headSha: repo.headSha,
+          serviceName: "api",
+          servicePath: ".",
+          runner: "unit",
+          cwd: repo.repoRoot,
+          workload: { command: "test-workload" },
+          requiredRoutes: ["POST /orders"],
+          approvals: [],
+        },
+        scenario.executor,
+        scenario.workload,
+      );
+
+      expect(bundle.conclusion).toBe("INCONCLUSIVE");
+      expect(bundle.coverage).toMatchObject({
+        complete: false,
+        changedRoutesDetected: 2,
+        changedRoutesObserved: 0,
+        changedRoutesMissing: [
+          "GET /api/catalogo/inline",
+          "POST /api/catalogo/inline",
+        ],
+        changeSource: "diff-inferred",
+      });
+      expect(
+        bundle.assertions.find((item) => item.id.startsWith("coverage.changed-route."))?.evidence,
+      ).toContain("Derivada por next-app-router desde src/app/api/catalogo/inline/route.ts.");
+      expect(bundle.nextActions).toContainEqual(
+        expect.objectContaining({
+          kind: "exercise-route",
+          subject: "POST /api/catalogo/inline",
+        }),
+      );
+    } finally {
+      rmSync(repo.repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("runs only the targeted matrix when schema and SQL did not change", async () => {
+    const repo = createAppRouteRepo("orders");
+    try {
+      const scenario = harness();
+      const bundle = await verifyRelease(
+        {
+          baseSha: repo.baseSha,
+          headSha: repo.headSha,
+          serviceName: "api",
+          servicePath: ".",
+          runner: "unit",
+          cwd: repo.repoRoot,
+          workload: { command: "test-workload" },
+          requiredRoutes: ["POST /orders", "GET /orders"],
+          approvals: [],
+        },
+        scenario.executor,
+        scenario.workload,
+      );
+
+      expect(bundle.conclusion).toBe("VERIFIED");
+      expect(bundle.provenance.artifacts).toContain("matrix=TARGETED_RELEASE_MATRIX");
+      expect(bundle.coverage).toMatchObject({
+        complete: true,
+        changedRoutesDetected: 2,
+        changedRoutesObserved: 2,
+        changedRoutesMissing: [],
+      });
+      expect(scenario.events.some((event) => event.includes("-s1"))).toBe(false);
+      expect(bundle.assertions.some((item) => item.state === "COEXIST_A0_A1_S1")).toBe(false);
+      expect(bundle.assertions.find((item) => item.id === "proof.execution-complete")?.result).toBe(
+        "pass",
+      );
+    } finally {
+      rmSync(repo.repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("fixtures.beforeAll (informe 2026-07-18, gate 2)", () => {
   it("graba el prefijo replayable, entrega el token al workload y conserva VERIFIED", async () => {
     const scenario = harness();
     const bundle = await verifyRelease(
       {
-        baseSha: "base",
-        headSha: "head",
+        baseSha: git(process.cwd(), ["rev-parse", "HEAD"]),
+        headSha: git(process.cwd(), ["rev-parse", "HEAD"]),
         serviceName: "api",
         servicePath: ".",
         runner: "unit",
@@ -382,8 +633,8 @@ describe("fixtures.beforeAll (informe 2026-07-18, gate 2)", () => {
     const scenario = harness();
     const bundle = await verifyRelease(
       {
-        baseSha: "base",
-        headSha: "head",
+        baseSha: git(process.cwd(), ["rev-parse", "HEAD"]),
+        headSha: git(process.cwd(), ["rev-parse", "HEAD"]),
         serviceName: "api",
         servicePath: ".",
         runner: "unit",

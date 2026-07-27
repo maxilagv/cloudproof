@@ -76,7 +76,8 @@ export function buildProgram(): Command {
     .command("plan")
     .description("Triage estatico acotado (<2 min); planifica, nunca emite VERIFIED")
     .requiredOption("--base-sha <sha>", "SHA de la version desplegada")
-    .requiredOption("--head-sha <sha>", "SHA del candidato")
+    .option("--head-sha <sha>", "SHA del candidato")
+    .option("--worktree", "planifica un snapshot inmutable del worktree sin crear un commit en la rama")
     .option("--service <name>", "servicio declarado en proof.config")
     .option("--profile <profile>", "trusted, internal o fork")
     .option("--json", "salida en JSON")
@@ -85,6 +86,7 @@ export function buildProgram(): Command {
       await runReleasePlan({
         baseSha: opts.baseSha,
         headSha: opts.headSha,
+        worktree: opts.worktree,
         json: opts.json,
         service: opts.service,
         profile: opts.profile,
@@ -92,9 +94,10 @@ export function buildProgram(): Command {
     });
   release
     .command("verify")
-    .description("Ejecuta la matriz A0/A1 × S0/S1, coexistencia y rollback; genera un Proof Bundle")
+    .description("Ejecuta la matriz adaptativa exigida por el diff; genera un Proof Bundle")
     .requiredOption("--base-sha <sha>", "SHA de la versión desplegada")
-    .requiredOption("--head-sha <sha>", "SHA del candidato")
+    .option("--head-sha <sha>", "SHA del candidato")
+    .option("--worktree", "verifica un snapshot inmutable del worktree sin crear un commit en la rama")
     .option("--service <name>", "servicio declarado en proof.config")
     .option("--profile <profile>", "trusted, internal o fork")
     .option("--json", "salida en JSON")
@@ -103,6 +106,7 @@ export function buildProgram(): Command {
       await runReleaseVerify({
         baseSha: opts.baseSha,
         headSha: opts.headSha,
+        worktree: opts.worktree,
         json: opts.json,
         service: opts.service,
         profile: opts.profile,

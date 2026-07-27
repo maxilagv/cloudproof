@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   SpawnRunner,
   type CommandRunner,
@@ -31,6 +31,12 @@ import {
 import { RELEASE_MATRIX } from "./matrix.js";
 import { deriveNextActions } from "./next-actions.js";
 import { withRemediation } from "./remediation.js";
+import {
+  planRelease,
+  type ReleaseTriagePlan,
+  type TriageImpactedHttpRoute,
+  type TriageReason,
+} from "./triage.js";
 
 export interface WorkloadSpec {
   command: string;
@@ -69,6 +75,13 @@ export interface VerifyInput {
   servicePort?: number;
   prismaSchema?: string;
   serviceDockerfile?: string;
+  /**
+   * "head": el CONTENIDO del Dockerfile sale del candidato para ambos lados
+   * (onboarding: el commit base desplegado no lo tiene). Las fuentes siguen
+   * saliendo del worktree de cada lado; la procedencia queda en la evidencia
+   * de BUILD_A0. Default "commit".
+   */
+  serviceDockerfileFrom?: "commit" | "head";
   serviceBuildContext?: string;
   serviceBuildArgs?: Record<string, string>;
   serviceEnv?: Record<string, string>;
@@ -77,12 +90,22 @@ export interface VerifyInput {
   workload?: WorkloadSpec;
   workloadTimeoutMs?: number;
   fixtures?: FixturesSpec;
+  /**
+   * Ruta repo-relativa a un .sql de bootstrap (identidad/datos de
+   * referencia) aplicado una vez, tras `migrate deploy` del commit base,
+   * sobre el seed S0 — todas las celdas lo heredan por clonación. Su digest
+   * sha256 queda en el Bundle. Ver FixturesConfigSchema.bootstrapSql.
+   */
+  bootstrapSql?: string;
   /** Universo obligatorio. Sin declaración, Proof nunca concluye VERIFIED. */
   requiredRoutes?: string[];
   /** GET/HEAD/OPTIONS capturados después de la última escritura. */
   rollbackProbeRoutes?: string[];
   approvals?: VerifyApproval[];
   executionProfile?: ExecutionProfile;
+  /** Exact origin of the candidate snapshot used for provenance UX. */
+  candidateSource?: "commit" | "clean-worktree" | "synthetic-worktree-commit";
+  candidateParentSha?: string;
 }
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -300,11 +323,82 @@ function routeOf(exchange: RecordedExchange): string {
   return normalizeRoute(`${exchange.request.method} ${exchange.request.path}`);
 }
 
+function routeTemplateMatches(template: string, observedPath: string): boolean {
+  const escaped = template
+    .split("/")
+    .map((segment) => {
+      if (/^\[\[\.\.\..+\]\]$/.test(segment)) return "(?:.*)?";
+      if (/^\[\.\.\..+\]$/.test(segment)) return ".+";
+      if (/^\[[^\]]+\]$/.test(segment)) return "[^/]+";
+      return segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    })
+    .join("/");
+  return new RegExp(`^${escaped}/?$`).test(observedPath.split("?", 1)[0] ?? observedPath);
+}
+
+function changedRouteMethodObserved(
+  route: TriageImpactedHttpRoute,
+  method: string,
+  exchanges: RecordedExchange[],
+): boolean {
+  return exchanges.some((exchange) => {
+    const observedMethod = exchange.request.method.toUpperCase();
+    return (
+      (method === "*" || method === observedMethod) &&
+      routeTemplateMatches(route.path, exchange.request.path)
+    );
+  });
+}
+
 function coverageFor(
   exchanges: RecordedExchange[],
   requiredRoutes: string[] | undefined,
+  changedRoutes: TriageImpactedHttpRoute[],
+  changeAnalysisComplete: boolean,
 ): { coverage: Coverage; assertions: Assertion[]; missingRoutes: string[] } {
   const observed = new Set(exchanges.map(routeOf));
+  const changedObligations = changedRoutes.flatMap((route) =>
+    (route.methods.length === 0 ? ["*"] : route.methods).map((method) => ({
+      route,
+      method,
+      label: `${method} ${route.path}`,
+    })),
+  );
+  const missingChanged = changedObligations.filter(
+    ({ route, method }) => !changedRouteMethodObserved(route, method, exchanges),
+  );
+  const changeCoverage = {
+    changedRoutesDetected: changedObligations.length,
+    changedRoutesObserved: changedObligations.length - missingChanged.length,
+    changedRoutesMissing: missingChanged.map(({ label }) => label),
+    changeSource: !changeAnalysisComplete
+      ? ("unknown" as const)
+      : changedRoutes.length === 0
+        ? ("not-applicable" as const)
+        : ("diff-inferred" as const),
+  };
+  const changeAssertions: Assertion[] = [
+    ...(!changeAnalysisComplete
+      ? [{
+          id: "coverage.changed-routes-analysis",
+          result: "skipped" as const,
+          mandatory: true,
+          state: "A0_S0" as const,
+          evidence: ["El diff no pudo analizarse por completo; la cobertura de rutas modificadas es desconocida."],
+        }]
+      : []),
+    ...missingChanged.map(({ route, method, label }): Assertion => ({
+      id: `coverage.changed-route.${routeSlug(method, route.path)}`,
+      result: "skipped",
+      mandatory: true,
+      state: "A0_S0",
+      evidence: [
+        `La ruta modificada ${label} no recibió tráfico HTTP en el workload.`,
+        `Derivada por ${route.detector} desde ${route.files.join(", ")}.`,
+        "La corrida puede demostrar seguridad de release, pero no el comportamiento del feature modificado.",
+      ],
+    })),
+  ];
   if (requiredRoutes === undefined) {
     return {
       coverage: {
@@ -313,6 +407,7 @@ function coverageFor(
         routesRequired: 0,
         source: "unknown",
         complete: false,
+        ...changeCoverage,
       },
       assertions: [
         {
@@ -321,8 +416,9 @@ function coverageFor(
           mandatory: true,
           evidence: ["No se declaró coverage.requiredRoutes; la cobertura es desconocida."],
         },
+        ...changeAssertions,
       ],
-      missingRoutes: [],
+      missingRoutes: missingChanged.map(({ label }) => label),
     };
   }
   const required = [...new Set(requiredRoutes.map(normalizeRoute))];
@@ -333,9 +429,10 @@ function coverageFor(
       routesDetected: required.length,
       routesRequired: required.length,
       source: "declared",
-      complete: missing.length === 0,
+      complete: missing.length === 0 && missingChanged.length === 0 && changeAnalysisComplete,
+      ...changeCoverage,
     },
-    assertions: missing.map((route) => {
+    assertions: [...missing.map((route) => {
       const [method = "", ...path] = route.split(" ");
       return {
         id: `coverage.route.${routeSlug(method, path.join(" "))}`,
@@ -343,8 +440,8 @@ function coverageFor(
         mandatory: true,
         evidence: [`La ruta obligatoria ${route} no fue ejercitada por el workload.`],
       };
-    }),
-    missingRoutes: missing,
+    }), ...changeAssertions],
+    missingRoutes: [...new Set([...missing, ...missingChanged.map(({ label }) => label)])],
   };
 }
 
@@ -577,6 +674,75 @@ function stageFailure(
   return inconclusive ? assertion : applyApproval(assertion, approvals);
 }
 
+/**
+ * V-2 (auditoría adversarial 2026-07-20). `planRelease` ya clasifica DDL
+ * destructivo y otras operaciones de riesgo "critical" por regex sobre el
+ * diff de la migración, pero `verifyRelease` nunca consumía ese resultado:
+ * un DROP/TRUNCATE sobre una superficie que el workload no ejercita no
+ * hacía fallar ninguna assertion dinámica y el bundle podía cerrar
+ * VERIFIED. Un mismo `code` de triage puede repetirse (dos DROP en el
+ * mismo archivo, o en archivos distintos) — el id de assertion incluye un
+ * hash de código+ubicación para no colisionar con el chequeo de unicidad
+ * de `bundle()`.
+ */
+function staticReasonAssertionId(reason: TriageReason): string {
+  const first = reason.evidence[0];
+  const locator = `${first?.path ?? ""}:${first?.line ?? ""}`;
+  const digest = createHash("sha256")
+    .update(`${reason.code}\u0000${locator}`)
+    .digest("hex")
+    .slice(0, 12);
+  const slug = reason.code
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `postgres.static.${slug}-${digest}`;
+}
+
+/**
+ * Reasons de riesgo "critical" (el techo de `TriageRisk`) se convierten en
+ * assertions mandatorias bajo el namespace `postgres.*`, así que la policy
+ * `no-destructive-migrations` ya existente las cubre sin cambios. Una
+ * approval explícita en `proof.config.ts` (mismo mecanismo que cualquier
+ * otra assertion) es la única forma de proceder pese al hallazgo — igual
+ * que "APPROVED CHANGE" en el resto del bundle, nunca una excepción muda.
+ */
+function staticCriticalRiskAssertions(
+  reasons: TriageReason[],
+  approvals: VerifyApproval[],
+): Assertion[] {
+  return reasons
+    .filter((reason) => reason.risk === "critical")
+    .map((reason): Assertion => {
+      const first = reason.evidence[0];
+      const locator =
+        first === undefined
+          ? undefined
+          : `${first.path}${first.line === undefined ? "" : `:${first.line}`}`;
+      return applyApproval(
+        {
+          id: staticReasonAssertionId(reason),
+          result: "fail",
+          mandatory: true,
+          state: "MIGRATE_S0_TO_S1",
+          evidence: [
+            `${reason.title} (${reason.code}).`,
+            reason.detail,
+            ...(locator === undefined
+              ? []
+              : [
+                  `Ubicación: ${locator}${first?.excerpt === undefined ? "" : ` — ${first.excerpt}`}`,
+                ]),
+            "Detectado por análisis estático de la migración antes de ejecutar cualquier workload " +
+              "(equivalente a `proof release plan`); ninguna ruta HTTP necesita ejercitar esta " +
+              "superficie para que el hallazgo cuente.",
+          ],
+        },
+        approvals,
+      );
+    });
+}
+
 function aggregateReplayAssertion(
   id: string,
   state: ExecutionState,
@@ -624,7 +790,10 @@ export async function verifyRelease(
   const approvals = input.approvals ?? [];
   const effectAssertions: Assertion[] = [];
   const completed = new Map<ExecutionState, Set<string>>();
+  let requiredStates = new Set<ExecutionState>(RELEASE_MATRIX.map((entry) => entry.id));
   if (input.executionProfile !== undefined) artifacts.push(`execution-profile=${input.executionProfile}`);
+  if (input.candidateSource !== undefined) artifacts.push(`candidate-source=${input.candidateSource}`);
+  if (input.candidateParentSha !== undefined) artifacts.push(`candidate-parent=${input.candidateParentSha}`);
 
   let recorder: Recorder | undefined;
   let exchanges: RecordedExchange[] = [];
@@ -635,7 +804,38 @@ export async function verifyRelease(
     routesRequired: input.requiredRoutes?.length ?? 0,
     source: input.requiredRoutes === undefined ? "unknown" : "declared",
     complete: false,
+    changedRoutesDetected: 0,
+    changedRoutesObserved: 0,
+    changedRoutesMissing: [],
+    changeSource: "unknown",
   };
+  let releasePlan: ReleaseTriagePlan | undefined;
+
+  // Bootstrap SQL: se resuelve y digesta ANTES de gastar Docker. Un archivo
+  // declarado pero ausente/ilegible es un fallo de preparación explícito,
+  // no un misterio a mitad de corrida.
+  const repoRoot = input.cwd ?? process.cwd();
+  let bootstrap: { absolutePath: string; digest: string; bytes: number } | undefined;
+  let bootstrapError: string | undefined;
+  if (input.bootstrapSql !== undefined) {
+    const absolutePath = resolve(repoRoot, input.bootstrapSql);
+    const relativePath = relative(repoRoot, absolutePath);
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      bootstrapError = `fixtures.bootstrapSql sale de la raíz del repositorio: ${input.bootstrapSql}`;
+    } else {
+      try {
+        const contents = readFileSync(absolutePath);
+        bootstrap = {
+          absolutePath,
+          digest: createHash("sha256").update(contents).digest("hex"),
+          bytes: contents.byteLength,
+        };
+        artifacts.push(`bootstrap-sql=sha256:${bootstrap.digest}`);
+      } catch {
+        bootstrapError = `fixtures.bootstrapSql no existe o no puede leerse: ${input.bootstrapSql}`;
+      }
+    }
+  }
 
   const mark = (state: ExecutionState, obligation: string): void => {
     const values = completed.get(state) ?? new Set<string>();
@@ -644,7 +844,11 @@ export async function verifyRelease(
   };
   const missingObligations = (): string[] =>
     RELEASE_MATRIX.flatMap((entry) =>
-      MATRIX_OBLIGATIONS[entry.id]
+      (!requiredStates.has(entry.id)
+        ? []
+        : entry.id === "A0_S0" && requiredStates.size < RELEASE_MATRIX.length
+          ? ["baseline"]
+          : MATRIX_OBLIGATIONS[entry.id])
         .filter((obligation) => !completed.get(entry.id)?.has(obligation))
         .map((obligation) => `${entry.id}:${obligation}`),
     );
@@ -690,6 +894,13 @@ export async function verifyRelease(
           platform: process.platform,
           arch: process.arch,
         },
+        candidate: {
+          source: input.candidateSource ?? "commit",
+          ...(input.candidateParentSha === undefined
+            ? {}
+            : { parentSha: input.candidateParentSha }),
+          developmentOnly: input.candidateSource === "synthetic-worktree-commit",
+        },
         // Sondas de readiness y reintentos transitorios del ejecutor: un
         // transitorio reintentado queda en la evidencia, no desaparece.
         ...(() => {
@@ -712,6 +923,11 @@ export async function verifyRelease(
     servicePath: input.servicePath,
     ...(input.prismaSchema === undefined ? {} : { prismaSchema: input.prismaSchema }),
     ...(cloneFromContainerId === undefined ? {} : { cloneFromContainerId }),
+    // Solo la base semilla (no clonada) aplica el bootstrap; los clones lo
+    // heredan con el resto del estado.
+    ...(bootstrap === undefined || cloneFromContainerId !== undefined
+      ? {}
+      : { bootstrapSql: bootstrap.absolutePath }),
   });
   const appEnv = (databaseUrl: string): Record<string, string> => ({
     ...(input.serviceEnv ?? {}),
@@ -774,6 +990,46 @@ export async function verifyRelease(
   let baselinePostWorkload: SqlEffectSnapshot | undefined;
 
   try {
+    // V-2: gate estático antes de gastar Docker. Si ya sabemos por el diff
+    // que hay una operación crítica sin aprobar, construir imágenes y
+    // levantar Postgres no cambia el veredicto — solo gasta minutos y
+    // tokens del agente que espera el resultado.
+    try {
+      releasePlan = await planRelease({
+        baseSha: input.baseSha,
+        headSha: input.headSha,
+        ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+        ...(input.serviceName === undefined ? {} : { serviceName: input.serviceName }),
+        servicePath: input.servicePath,
+        ...(input.prismaSchema === undefined ? {} : { prismaSchemaPath: input.prismaSchema }),
+        ...(input.executionProfile === undefined
+          ? {}
+          : { executionProfile: input.executionProfile }),
+      });
+      assertions.push(...staticCriticalRiskAssertions(releasePlan.reasons, approvals));
+      if (releasePlan.assurance.requiredStates.length > 0) {
+        requiredStates = new Set(releasePlan.assurance.requiredStates);
+      }
+      artifacts.push(`matrix=${releasePlan.assurance.level}`);
+    } catch (error) {
+      // Fallo del propio triage (p.ej. git no disponible): degrada a
+      // INCONCLUSIVE vía stageFailure(inconclusive=true), nunca a UNSAFE
+      // silencioso ni se descarta sin dejar evidencia.
+      assertions.push(
+        stageFailure("postgres.static.triage", "MIGRATE_S0_TO_S1", error, approvals, true),
+      );
+    }
+    if (assertions.some((assertion) => assertion.result === "fail" && assertion.approval === undefined)) {
+      return bundle();
+    }
+
+    if (bootstrapError !== undefined) {
+      assertions.push(
+        stageFailure("postgres.bootstrap", "A0_S0", new Error(bootstrapError), approvals, true),
+      );
+      return bundle();
+    }
+
     let baseImage: string;
     let candidateImage: string;
     try {
@@ -781,15 +1037,30 @@ export async function verifyRelease(
         sha: input.baseSha,
         servicePath: input.servicePath,
         ...buildExtras,
+        // Onboarding (informe Bs As Neumáticos): el candidato define la
+        // receta para ambos lados cuando el commit base no la contiene.
+        ...(input.serviceDockerfileFrom === "head"
+          ? { dockerfileFromSha: input.headSha }
+          : {}),
       });
       const digest = await executor.imageDigest(baseImage);
       artifacts.push(`A0=${digest}`);
+      if (input.serviceDockerfileFrom === "head") {
+        artifacts.push(`a0-dockerfile-from=${input.headSha}`);
+      }
       assertions.push({
         id: "build.base",
         result: "pass",
         mandatory: true,
         state: "BUILD_A0",
-        evidence: [digest],
+        evidence: [
+          digest,
+          ...(input.serviceDockerfileFrom === "head"
+            ? [
+                `Dockerfile tomado del candidato ${input.headSha.slice(0, 12)} (dockerfileFrom=head); las fuentes provienen del commit base.`,
+              ]
+            : []),
+        ],
       });
       mark("BUILD_A0", "image");
     } catch (error) {
@@ -830,6 +1101,19 @@ export async function verifyRelease(
         state: "A0_S0",
         evidence: ["S0 baseline fue clonado desde un seed inmutable."],
       });
+      if (bootstrap !== undefined) {
+        assertions.push({
+          id: "postgres.bootstrap",
+          result: "pass",
+          mandatory: true,
+          state: "A0_S0",
+          evidence: [
+            `Bootstrap SQL aplicado tras las migraciones base: ${input.bootstrapSql} ` +
+              `(sha256:${bootstrap.digest}, ${bootstrap.bytes} bytes). ` +
+              "Las demás celdas de la matriz lo heredan por clonación del seed S0.",
+          ],
+        });
+      }
     } catch (error) {
       assertions.push(stageFailure("postgres.baseline-schema", "A0_S0", error, approvals, true));
       return bundle();
@@ -1015,7 +1299,12 @@ export async function verifyRelease(
       });
     }
     baselinePostWorkload = await captureEffects(baselineDb);
-    const coverageResult = coverageFor(exchanges, input.requiredRoutes);
+    const coverageResult = coverageFor(
+      exchanges,
+      input.requiredRoutes,
+      releasePlan?.changes.impactedHttpRoutes ?? [],
+      releasePlan?.analysis.complete === true,
+    );
     coverage = coverageResult.coverage;
     missingRoutes = coverageResult.missingRoutes;
     assertions.push(...coverageResult.assertions);
@@ -1053,6 +1342,149 @@ export async function verifyRelease(
       state: "A0_S0",
       evidence: [`Última escritura capturada en el ordinal ${lastWriteIndex}.`],
     });
+    // App-only fast path. Static triage proved that no schema/SQL surface
+    // changed, so migration, coexistence and rollback cells would exercise
+    // an identical S0/S1. Keep the evidence that matters: both builds,
+    // attributable A0 baseline, full A1 replay and observable SQL effects.
+    if (releasePlan?.assurance.level === "TARGETED_RELEASE_MATRIX") {
+      let database: RunningContainer | undefined;
+      let app: RunningContainer | undefined;
+      try {
+        database = await startClone(seedS0, input.baseSha, "S0");
+        const schemaBefore = await captureSchema(database);
+        const effectsPreStart = await captureEffects(database);
+        app = await executor.startApp(candidateImage, appEnv(database.connectionUrl ?? ""));
+        started.push(app);
+        assertions.push({
+          id: "postgres.candidate-old-schema.startup",
+          result: "pass",
+          mandatory: true,
+          state: "A1_S0",
+          evidence: ["A1 reached readiness on S0 in the app-only targeted matrix."],
+        });
+        const schemaPostStart = await captureSchema(database);
+        const effectsPostStart = await captureEffects(database);
+        const startupSchema = schemaStableAssertion(
+          "postgres.candidate-old-schema.schema-startup",
+          "A1_S0",
+          schemaBefore,
+          schemaPostStart,
+          approvals,
+        );
+        const startupEffects = sqlEffectAssertion(
+          baselinePreStart,
+          baselinePostStart,
+          effectsPreStart,
+          effectsPostStart,
+          approvals,
+          {
+            id: "postgres.candidate-old-schema.startup-effects",
+            state: "A1_S0",
+            candidateLabel: "A1 on S0 startup",
+            requireBaselineWrites: false,
+          },
+        );
+        assertions.push(startupSchema, startupEffects);
+        effectAssertions.push(startupEffects);
+        if (startupSchema.result !== "pass") return bundle();
+
+        const results = await new Replayer(httpOptions).replay(
+          exchanges,
+          app.connectionUrl ?? "",
+        );
+        assertions.push(
+          replayCardinalityAssertion(
+            "postgres.candidate-old-schema.cardinality",
+            "A1_S0",
+            exchanges.length,
+            results,
+            approvals,
+          ),
+          ...routeAssertions(results, approvals, {
+            idPrefix: "postgres.candidate-old-schema",
+            state: "A1_S0",
+            label: "A1 on S0",
+          }),
+        );
+        const schemaPostReplay = await captureSchema(database);
+        const runtimeSchema = schemaStableAssertion(
+          "postgres.candidate-old-schema.schema-runtime",
+          "A1_S0",
+          schemaBefore,
+          schemaPostReplay,
+          approvals,
+        );
+        assertions.push(runtimeSchema);
+        const appCleaned = await teardownTracked(app);
+        app = undefined;
+        const effectsPostWorkload = appCleaned ? await captureEffects(database) : undefined;
+        const workloadEffects = sqlEffectAssertion(
+          baselinePostStart,
+          baselinePostWorkload,
+          effectsPostStart,
+          effectsPostWorkload,
+          approvals,
+          {
+            id: "postgres.candidate-old-schema.workload-effects",
+            state: "A1_S0",
+            candidateLabel: "A1 on S0 workload",
+          },
+        );
+        assertions.push(workloadEffects);
+        effectAssertions.push(workloadEffects);
+        const databaseCleaned = await teardownTracked(database);
+        database = undefined;
+        if (
+          results.length === exchanges.length &&
+          results.every((result) => result.matches) &&
+          startupSchema.result === "pass" &&
+          runtimeSchema.result === "pass" &&
+          startupEffects.result !== "skipped" &&
+          workloadEffects.result !== "skipped" &&
+          appCleaned &&
+          databaseCleaned
+        ) {
+          mark("A1_S0", "clean-replay");
+        }
+      } catch (error) {
+        assertions.push(
+          stageFailure("postgres.candidate-old-schema.execution", "A1_S0", error, approvals),
+        );
+      } finally {
+        if (app !== undefined) await teardownTracked(app);
+        if (database !== undefined) await teardownTracked(database);
+      }
+
+      const effectUnavailable = effectAssertions.some((assertion) => assertion.result === "skipped");
+      const effectFailed = effectAssertions.some(
+        (assertion) => assertion.result === "fail" && assertion.approval === undefined,
+      );
+      assertions.push({
+        id: "postgres.sql-effects.matrix",
+        result: effectUnavailable ? "skipped" : effectFailed ? "fail" : "pass",
+        mandatory: true,
+        state: "SQL_EFFECTS",
+        evidence: [
+          `${effectAssertions.length} comparison(s) in targeted matrix; schema diff = 0.`,
+        ],
+      });
+      if (!effectUnavailable) mark("SQL_EFFECTS", "aggregate");
+      const missing = missingObligations();
+      assertions.push({
+        id: "proof.execution-complete",
+        result: missing.length === 0 ? "pass" : "skipped",
+        mandatory: true,
+        state: "SQL_EFFECTS",
+        evidence:
+          missing.length === 0
+            ? [
+                "Targeted matrix complete: schema/SQL did not change, so migration, coexistence and rollback cells were not required.",
+              ]
+            : [`Targeted obligations without complete evidence: ${missing.slice(0, 20).join(", ")}.`],
+      });
+      return bundle();
+    }
+
     const preparationExchanges = exchanges.slice(0, lastWriteIndex + 1);
     const trailingReads = exchanges
       .slice(lastWriteIndex + 1)

@@ -284,4 +284,25 @@ describe("normalizadores (calibración gate 1.E)", () => {
     expect(normalized["id"]).toBe("abc");
     expect(normalized["token"]).toBe("two words here");
   });
+
+  it("V-1: no normaliza ids numéricos de baja cardinalidad aunque la clave sea volátil", async () => {
+    // Regresión (auditoría adversarial 2026-07-20): antes de este fix,
+    // cualquier número bajo una clave volátil se borraba sin importar su
+    // magnitud. Un customerId chico (referencia relacional de negocio, no
+    // un id opaco generado) debe seguir siendo comparable — de lo
+    // contrario un IDOR/join roto que devuelve la fila de otro cliente
+    // normaliza igual en baseline y candidato y el mismatch desaparece.
+    const { normalizeBody } = await import("../dist/index.js");
+
+    const normalized = normalizeBody({
+      customerId: 7,
+      orderId: 42,
+      accountId: 12345678,
+    }) as Record<string, unknown>;
+
+    expect(normalized["customerId"]).toBe(7);
+    expect(normalized["orderId"]).toBe(42);
+    // ≥8 dígitos: mismo umbral que ya regía para strings, sigue opaco.
+    expect(normalized["accountId"]).toBe("<volatile-id>");
+  });
 });

@@ -57,5 +57,15 @@ export {
   type ExecutionPolicy,
   type BuildNetworkMode,
 } from "./execution-profile.js";
-export { WorktreeManager } from "./worktrees.js";
+export {
+  WorktreeManager,
+  snapshotWorkingTree,
+  type WorkingTreeSnapshot,
+} from "./worktrees.js";
+export {
+  parseDockerfileStages,
+  preflightImageRuntime,
+  type ImagePreflightFinding,
+  type ImagePreflightInput,
+} from "./image-preflight.js";
 export { ExecutorError, redactDiagnosticText } from "./errors.js";

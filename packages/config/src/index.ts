@@ -6,6 +6,7 @@ export {
   WorkloadConfigSchema,
   FixturesConfigSchema,
   CoverageConfigSchema,
+  EnvClassificationSchema,
   ApprovalConfigSchema,
   ExecutionProfileSchema,
   RepoRelativePathSchema,
@@ -18,6 +19,7 @@ export {
   type WorkloadConfig,
   type FixturesConfig,
   type CoverageConfig,
+  type EnvClassificationConfig,
   type ApprovalConfig,
 } from "./schema.js";
 export { defineProject, nextjs, node, postgres, redis } from "./define-project.js";

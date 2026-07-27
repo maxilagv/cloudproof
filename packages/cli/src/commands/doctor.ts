@@ -4,7 +4,10 @@ import { createConnection } from "node:net";
 import { spawnSync } from "node:child_process";
 import semver from "semver";
 import { loadConfig, type ProjectConfig } from "@proof/config";
-import { isPrismaSchemaTarget } from "@proof/docker-executor";
+import { isPrismaSchemaTarget, preflightImageRuntime } from "@proof/docker-executor";
+import { classifyEnvKeys } from "./env-classifier.js";
+import { countAuthOperations } from "./auth-fixtures.js";
+import { findOpenApiSpec } from "./openapi-workload.js";
 import { paint, severityLabel, symbols } from "../ui.js";
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
@@ -56,11 +59,22 @@ function checkRuntime(command: string, args: string[], label: string): DoctorFin
   return [];
 }
 
+/** Config cargable o undefined; los errores de carga los reporta checkProject. */
+async function tryLoadConfig(cwd: string): Promise<ProjectConfig | undefined> {
+  try {
+    return await loadConfig(cwd);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorFinding[]> {
   const cwd = resolve(options.cwd ?? process.cwd());
+  const config = await tryLoadConfig(cwd);
   const findings: DoctorFinding[] = [
     ...checkNodeVersion(cwd),
-    ...checkEnvDrift(cwd),
+    ...(await checkEnvDrift(cwd, config)),
+    ...checkProofDirIgnored(cwd),
     ...(options.systemChecks === false
       ? []
       : [
@@ -71,6 +85,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorFind
           ...checkTrackedSecrets(cwd),
         ]),
     ...(await checkProject(cwd)),
+    ...checkImageRuntime(cwd, config),
+    ...checkAuthFixtures(cwd, config),
     ...(options.systemChecks === false ? [] : await checkServicePorts(cwd)),
   ];
 
@@ -110,7 +126,74 @@ function checkNodeVersion(cwd: string): DoctorFinding[] {
   return [];
 }
 
-function checkEnvDrift(cwd: string): DoctorFinding[] {
+const ENV_SURFACE_SKIP = new Set([
+  ".git",
+  ".proof",
+  ".next",
+  ".turbo",
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+]);
+
+function environmentReferenceFiles(cwd: string, roots: string[]): string[] {
+  const files: string[] = [];
+  const visited = new Set<string>();
+  const visit = (directory: string): void => {
+    if (files.length >= 2_000 || visited.has(directory)) return;
+    visited.add(directory);
+    try {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (files.length >= 2_000) break;
+        if (entry.isDirectory()) {
+          if (!ENV_SURFACE_SKIP.has(entry.name)) visit(join(directory, entry.name));
+          continue;
+        }
+        if (
+          entry.isFile() &&
+          (/^(?:Dockerfile(?:\..+)?|compose(?:\..+)?\.ya?ml|prisma\.config\.[cm]?[jt]s)$/i.test(entry.name) ||
+            /\.(?:prisma|ya?ml)$/i.test(entry.name))
+        ) {
+          files.push(join(directory, entry.name));
+        }
+      }
+    } catch {
+      // Optional/unreadable directories do not create an env requirement.
+    }
+  };
+  for (const root of roots) {
+    const absolute = resolve(cwd, root);
+    if (insideProject(cwd, absolute)) visit(absolute);
+  }
+  return [...new Set(files)];
+}
+
+function referencedEnvironmentNames(files: string[], candidates: Set<string>): Set<string> {
+  const referenced = new Set<string>();
+  for (const file of files) {
+    let contents: string;
+    try {
+      contents = readFileSync(file, "utf-8");
+    } catch {
+      continue;
+    }
+    if (Buffer.byteLength(contents, "utf8") > 512 * 1024) continue;
+    for (const name of candidates) {
+      if (referenced.has(name)) continue;
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(`(?:env\\(["']${escaped}["']\\)|\\$\\{${escaped}(?::-[^}]*)?\\}|\\b${escaped}\\b)`).test(contents)) {
+        referenced.add(name);
+      }
+    }
+  }
+  return referenced;
+}
+
+function checkEnvDrift(
+  cwd: string,
+  config?: ProjectConfig,
+): DoctorFinding[] {
   const examplePath = join(cwd, ".env.example");
   const envPath = join(cwd, ".env");
   if (!existsSync(examplePath)) return [];
@@ -118,23 +201,201 @@ function checkEnvDrift(cwd: string): DoctorFinding[] {
   const fileKeys = existsSync(envPath)
     ? parseEnvKeys(readFileSync(envPath, "utf-8"))
     : new Set<string>();
-  const missing = [...declaredKeys].filter(
-    (key) => !fileKeys.has(key) && process.env[key] === undefined,
+  const configuredKeys = new Set(
+    config === undefined
+      ? []
+      : Object.values(config.services).flatMap((service) => [
+          ...Object.keys(service.env ?? {}),
+          ...Object.keys(service.buildArgs ?? {}),
+        ]),
   );
-  return missing.length === 0
-    ? []
-    : [
-        {
-          severity: "MEDIUM",
-          message: `${missing.length} variable(s) requeridas no están en .env ni en el proceso: ${missing.join(", ")}`,
-        },
-      ];
+  const missing = [...declaredKeys].filter(
+    (key) =>
+      !fileKeys.has(key) && !configuredKeys.has(key) && process.env[key] === undefined,
+  );
+  if (missing.length === 0) return [];
+
+  const inferred = classifyEnvKeys(cwd, new Set(missing));
+  const requiredOverride = new Set(config?.env?.required ?? []);
+  const optionalOverride = new Set(config?.env?.optional ?? []);
+  // Tercera señal: referencias fuera del código JS/TS (Dockerfile, compose,
+  // prisma env("...")). Cubre DATABASE_URL-solo-en-schema y similares, donde
+  // no existe una lectura process.env que clasificar.
+  const surfaceOnly = referencedEnvironmentNames(
+    environmentReferenceFiles(
+      cwd,
+      config === undefined ? ["."] : Object.values(config.services).map((service) => service.path),
+    ),
+    new Set(missing.filter((name) => inferred.get(name)?.usage === "unreferenced")),
+  );
+  const relevant = missing.filter(
+    (name) =>
+      requiredOverride.has(name) ||
+      (!optionalOverride.has(name) &&
+        (inferred.get(name)?.usage === "required" || surfaceOnly.has(name))),
+  );
+  const conditional = missing.filter(
+    (name) =>
+      optionalOverride.has(name) ||
+      (!requiredOverride.has(name) && inferred.get(name)?.usage === "conditional"),
+  );
+  const unrelated = missing.filter(
+    (name) => !relevant.includes(name) && !conditional.includes(name),
+  );
+  const findings: DoctorFinding[] = [];
+  if (relevant.length > 0) {
+    const shown = relevant.slice(0, 10).join(", ");
+    const extra = relevant.length > 10 ? ` (+${relevant.length - 10} más)` : "";
+    findings.push({
+      severity: "MEDIUM",
+      message:
+        `${relevant.length} variable(s) ausentes son requeridas por lecturas sin fallback en la superficie verificada: ` +
+        `${shown}${extra}. Evidencia: ${relevant.flatMap((name) => inferred.get(name)?.evidence ?? []).slice(0, 5).join(", ") || "override proof.config"}.`,
+    });
+  }
+  if (conditional.length > 0) {
+    findings.push({
+      severity: "LOW",
+      message:
+        `${conditional.length} variable(s) ausentes solo aparecen en rutas condicionales/con fallback; ` +
+        `no bloquean esta corrida: ${conditional.slice(0, 5).join(", ")}${conditional.length > 5 ? ` (+${conditional.length - 5} más)` : ""}.`,
+    });
+  }
+  if (unrelated.length > 0) {
+    findings.push({
+      severity: "LOW",
+      message:
+        `${unrelated.length} variable(s) de .env.example están ausentes pero no aparecen en la superficie ` +
+        "config/runtime/workload verificada; se omite la lista para evitar ruido.",
+    });
+  }
+  return findings;
 }
 
 function insideProject(cwd: string, path: string): boolean {
   const absolute = resolve(cwd, path);
   const rel = relative(cwd, absolute);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function checkProofDirIgnored(cwd: string): DoctorFinding[] {
+  const repository = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
+    cwd,
+    encoding: "utf-8",
+    windowsHide: true,
+  });
+  if (repository.status !== 0) return [];
+  // Peor caso primero: evidencia YA versionada — un bundle en la historia de
+  // Git no es un problema estético, es evidencia local publicada como código.
+  const tracked = spawnSync("git", ["ls-files", "--", ".proof"], {
+    cwd,
+    encoding: "utf-8",
+    windowsHide: true,
+  });
+  const trackedFiles =
+    tracked.status === 0
+      ? tracked.stdout
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+      : [];
+  if (trackedFiles.length > 0) {
+    return [
+      {
+        severity: "HIGH",
+        message:
+          `Hay evidencia de .proof/ versionada en Git (${trackedFiles.length} archivo(s), ej. ${trackedFiles[0]}). ` +
+          "Sacala del índice con `git rm -r --cached .proof`, corré `proof init` para agregar .proof/ a " +
+          ".gitignore y revisá el historial antes de publicar.",
+      },
+    ];
+  }
+  if (!existsSync(join(cwd, ".proof"))) return [];
+  const ignored = spawnSync("git", ["check-ignore", "-q", ".proof/probe"], {
+    cwd,
+    encoding: "utf-8",
+    windowsHide: true,
+  });
+  if (ignored.status === 0) return [];
+  return [
+    {
+      severity: "LOW",
+      message:
+        ".proof/ no está ignorado por Git; contiene evidencia local y snapshots que no deben versionarse. " +
+        "Corré `proof init` (agrega .proof/ a .gitignore) o agregalo a mano.",
+    },
+  ];
+}
+
+function resolvedDockerfile(
+  cwd: string,
+  service: ProjectConfig["services"][string],
+): string | undefined {
+  const candidates = service.dockerfile === undefined
+    ? [join(service.path, "Dockerfile"), "Dockerfile"]
+    : [service.dockerfile];
+  return candidates
+    .map((candidate) => resolve(cwd, candidate))
+    .find((candidate) => insideProject(cwd, candidate) && existsSync(candidate));
+}
+
+function serviceUsesPrisma(
+  cwd: string,
+  service: ProjectConfig["services"][string],
+): boolean {
+  const candidates = service.prismaSchema === undefined
+    ? [join(service.path, "prisma", "schema.prisma"), join(service.path, "prisma", "schema"), "prisma/schema.prisma", "prisma/schema"]
+    : [service.prismaSchema];
+  return candidates.some((candidate) => isPrismaSchemaTarget(resolve(cwd, candidate)));
+}
+
+function checkImageRuntime(
+  cwd: string,
+  config?: ProjectConfig,
+): DoctorFinding[] {
+  if (config === undefined) return [];
+  const findings: DoctorFinding[] = [];
+  for (const [name, service] of Object.entries(config.services)) {
+    const dockerfile = resolvedDockerfile(cwd, service);
+    if (dockerfile === undefined) continue;
+    let dockerfileContents: string;
+    try {
+      dockerfileContents = readFileSync(dockerfile, "utf-8");
+    } catch {
+      continue;
+    }
+    for (const finding of preflightImageRuntime({
+      dockerfileContents,
+      usesPrisma: serviceUsesPrisma(cwd, service),
+    })) {
+      findings.push({
+        severity: finding.severity,
+        message: `Servicio "${name}": ${finding.message} Evidencia: ${finding.evidence.join(", ")}.`,
+      });
+    }
+  }
+  return findings;
+}
+
+function checkAuthFixtures(
+  cwd: string,
+  config?: ProjectConfig,
+): DoctorFinding[] {
+  if (config === undefined || config.fixtures?.beforeAll !== undefined) return [];
+  const spec = findOpenApiSpec(cwd);
+  if (spec === undefined) return [];
+  const authOperations = countAuthOperations(spec.document);
+  return authOperations === 0
+    ? []
+    : [
+        {
+          severity: "MEDIUM",
+          message:
+            `${authOperations} operación(es) OpenAPI requieren autenticación pero no se declaró fixtures.beforeAll; ` +
+            "el workload puede quedarse fuera de los flujos de negocio protegidos. " +
+            "Sin registro público, sembrá la identidad con fixtures.bootstrapSql y obtené el token vía login HTTP en fixtures.beforeAll.",
+        },
+      ];
 }
 
 function serviceFindings(cwd: string, config: ProjectConfig): DoctorFinding[] {
@@ -276,6 +537,15 @@ async function checkProject(cwd: string): Promise<DoctorFinding[]> {
         severity: "HIGH",
         message: `El comando de fixtures.beforeAll "${config.fixtures.beforeAll.command}" no está disponible en PATH.`,
       });
+    }
+    if (config.fixtures?.bootstrapSql !== undefined) {
+      const bootstrapPath = config.fixtures.bootstrapSql;
+      if (!insideProject(cwd, bootstrapPath) || !existsSync(resolve(cwd, bootstrapPath))) {
+        findings.push({
+          severity: "HIGH",
+          message: `fixtures.bootstrapSql apunta a un archivo inexistente: ${bootstrapPath}. Sin bootstrap la identidad inicial no existe y la corrida fallará en la preparación.`,
+        });
+      }
     }
     if (config.coverage === undefined) {
       findings.push({

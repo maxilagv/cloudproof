@@ -193,6 +193,40 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
     expect(report).not.toContain("Required route coverage is incomplete");
   });
 
+  it("distingue coverage declarada de una ruta realmente modificada sin tráfico", () => {
+    const bundle: ProofBundle = {
+      ...unsafeBundle,
+      conclusion: "INCONCLUSIVE",
+      assertions: [
+        {
+          id: "coverage.changed-route.post-api-catalogo-inline",
+          result: "skipped",
+          mandatory: true,
+          state: "A0_S0",
+          evidence: ["La ruta modificada POST /api/catalogo/inline no recibió tráfico HTTP."],
+        },
+      ],
+      coverage: {
+        routesObserved: 2,
+        routesDetected: 2,
+        routesRequired: 2,
+        source: "declared",
+        complete: false,
+        changedRoutesDetected: 1,
+        changedRoutesObserved: 0,
+        changedRoutesMissing: ["POST /api/catalogo/inline"],
+        changeSource: "diff-inferred",
+      },
+    };
+
+    const report = renderHumanReport(bundle, [], "x.json");
+
+    expect(report).toContain("Change coverage is incomplete");
+    expect(report).toContain("Changed route without traffic: POST /api/catalogo/inline");
+    expect(report).toContain("cannot claim that the modified feature works");
+    expect(report).not.toContain("Required route coverage is incomplete");
+  });
+
   it("imprime la matriz celda por celda desde los states del Bundle", () => {
     const report = renderHumanReport(unsafeBundle, [], "x.json");
 

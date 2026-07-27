@@ -32,17 +32,27 @@ export function createProofMcpServer(): McpServer {
       "o de riesgo alto exige la matriz completa; no interpretes ausencia de patrones como seguridad.",
     {
       baseSha: z.string().describe("SHA/ref de la version desplegada"),
-      headSha: z.string().describe("SHA/ref del candidato"),
+      headSha: z
+        .string()
+        .optional()
+        .describe("SHA/ref del candidato; omitir cuando worktree=true"),
+      worktree: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: planifica sobre un snapshot inmutable del arbol de trabajo (cambios sin commit); excluye headSha",
+        ),
       service: z.string().optional().describe("Servicio declarado en proof.config"),
       profile: z.enum(["trusted", "internal", "fork"]).optional(),
       cwd: z.string().optional().describe("Directorio del proyecto"),
     },
-    async ({ baseSha, headSha, service, profile, cwd }) => {
+    async ({ baseSha, headSha, worktree, service, profile, cwd }) => {
       const plan = await runReleasePlan({
         baseSha,
-        headSha,
         json: true,
         writeOutput() {},
+        ...(headSha === undefined ? {} : { headSha }),
+        ...(worktree === undefined ? {} : { worktree }),
         ...(service === undefined ? {} : { service }),
         ...(profile === undefined ? {} : { profile }),
         ...(cwd === undefined ? {} : { cwd }),
@@ -53,11 +63,12 @@ export function createProofMcpServer(): McpServer {
 
   server.tool(
     "proof_release_verify",
-    "Ejecuta la matriz completa: builds A0/A1, A0/A1 sobre S0/S1, migración limpia y poblada, " +
-      "dos schedules de coexistencia y rollback A0 después del prefijo de escrituras de A1. " +
+    "Ejecuta la matriz exigida por el plan: completa ante cambios/riesgos de datos (A0/A1 sobre S0/S1, " +
+      "coexistencia y rollback) o enfocada para un diff de aplicación con schema diff cero. " +
       "y devuelve un Proof Bundle con conclusion VERIFIED | UNSAFE | INCONCLUSIVE (enum tipado, no prosa). " +
       "Seguí el assurance/nextCommand de proof_release_plan; es una operación cara que levanta contenedores y bases efímeras. " +
-      "Cómo actuar según conclusion: VERIFIED → podés declarar el trabajo terminado citando el bundle. " +
+      "Cómo actuar según conclusion: VERIFIED → podés declarar el snapshot probado citando el bundle; " +
+      "si provenance.candidate.developmentOnly=true todavía falta verificar el commit publicado para merge/deploy. " +
       "UNSAFE → NO declarar terminado; las assertions fallidas pueden traer 'remediation' (secuencia expand/contract " +
       "determinista): aplicá esos pasos a la migración y volvé a llamar este tool hasta VERIFIED; nunca agregues " +
       "una approval vos mismo, las approvals son decisión humana. " +
@@ -67,17 +78,28 @@ export function createProofMcpServer(): McpServer {
       "evidencia content-addressed y firmas verificadas. El perfil fork falla cerrado si no existe un adapter de workload aislado.",
     {
       baseSha: z.string().describe("SHA de la versión actualmente desplegada"),
-      headSha: z.string().describe("SHA del candidato a mergear"),
+      headSha: z
+        .string()
+        .optional()
+        .describe("SHA del candidato a mergear; omitir cuando worktree=true"),
+      worktree: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: verifica un snapshot inmutable del arbol de trabajo (cambios sin commit, ideal para iterar). " +
+            "El bundle queda atado a ese snapshot; un gate de merge sigue exigiendo verificar el commit publicado. Excluye headSha.",
+        ),
       service: z.string().optional().describe("Servicio de proof.config.ts en monorepos"),
       profile: z.enum(["trusted", "internal", "fork"]).optional(),
       cwd: z.string().optional().describe("Directorio del proyecto (default: cwd del proceso)"),
     },
-    async ({ baseSha, headSha, service, profile, cwd }) => {
+    async ({ baseSha, headSha, worktree, service, profile, cwd }) => {
       const bundle = await runReleaseVerify({
         baseSha,
-        headSha,
         json: true,
         writeOutput() {},
+        ...(headSha === undefined ? {} : { headSha }),
+        ...(worktree === undefined ? {} : { worktree }),
         ...(service !== undefined ? { service } : {}),
         ...(profile !== undefined ? { profile } : {}),
         ...(cwd !== undefined ? { cwd } : {}),

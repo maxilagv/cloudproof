@@ -1,5 +1,15 @@
 # Changelog — @proof/schema
 
+## 0.0.1 (continuación — coverage del cambio y snapshots de desarrollo)
+
+- `CoverageSchema` incorpora métricas aditivas de rutas/métodos derivados del
+  diff (`changedRoutesDetected`, `changedRoutesObserved`,
+  `changedRoutesMissing`, `changeSource`). Un hueco del cambio impide
+  `VERIFIED` aunque el universo declarado esté completo.
+- Provenance v1 puede declarar el origen del candidato y marcar un commit
+  sintético de worktree como `developmentOnly`, sin confundirlo con un commit
+  publicado apto para gates de merge/deploy.
+
 ## Proof Bundle v2 (adición compatible de lectura)
 
 - `ProofBundleSchema` lee v1 y v2; se exponen schemas y tipos explícitos para

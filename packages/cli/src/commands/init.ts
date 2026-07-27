@@ -8,11 +8,16 @@ import {
   planWorkloadFromOpenApi,
   renderWorkloadScript,
 } from "./openapi-workload.js";
+import { planAuthFixtures, renderAuthFixtureScript } from "./auth-fixtures.js";
 import { nodeDetector } from "@proof/plugin-node";
 import { postgresDetector } from "@proof/plugin-postgres";
 import { prismaDetector } from "@proof/plugin-prisma";
 import { githubActionsDetector } from "@proof/plugin-github-actions";
-import type { Detector } from "@proof/plugin-sdk";
+import {
+  classifyGeneratedPath,
+  prismaGeneratorOutputs,
+  type Detector,
+} from "@proof/plugin-sdk";
 
 /**
  * Ver tesis, sección 6.3 ("Ejemplo de primera experiencia") y 15.2
@@ -57,9 +62,17 @@ export interface DetectedService {
   buildArgs?: Record<string, string>;
 }
 
+/** Candidato descartado como servicio, con la evidencia de por qué. */
+export interface ExcludedServiceCandidate {
+  path: string;
+  reason: string;
+}
+
 export interface InitResult {
   detected: Array<{ kind: string; evidence: string[] }>;
   services: DetectedService[];
+  /** Directorios con package.json que NO son servicios (código generado, etc.). */
+  excluded: ExcludedServiceCandidate[];
   configWritten: boolean;
   configPath: string;
   /** Config de datos puros para perfiles internal/fork (solo en scaffolds nuevos). */
@@ -68,6 +81,9 @@ export interface InitResult {
   agentsPath: string;
   /** "created" | "updated" | "unchanged" para AGENTS.md. */
   agentsResult: "created" | "updated" | "unchanged";
+  /** Gestión de .gitignore: .proof/ es evidencia local y nunca debe versionarse. */
+  gitignorePath: string;
+  gitignoreResult: "created" | "updated" | "unchanged";
   /** Workload generado desde OpenAPI cuando el repo no declara e2e propio. */
   workloadGenerated?: {
     scriptPath: string;
@@ -76,18 +92,27 @@ export interface InitResult {
     routes: number;
     gaps: string[];
   };
+  /** Fixture de identidad HTTP generado desde la evidencia del spec OpenAPI. */
+  authFixturesGenerated?: {
+    scriptPath: string;
+    loginPath: string;
+    registerPath?: string;
+    tokenProperty: string;
+    gaps: string[];
+  };
 }
 
 interface WorkloadSetup {
   workload?: { command: string; args: string[] };
   coverage?: { requiredRoutes: string[]; rollbackProbeRoutes?: string[] };
+  fixtures?: { beforeAll: { command: string; args: string[] } };
 }
 
 export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const cwd = options.cwd ?? process.cwd();
   const results = await Promise.all(DETECTORS.map((d) => d.detect(cwd)));
   const detected = results.filter((r) => r.detected).map((r) => ({ kind: r.kind, evidence: r.evidence }));
-  const services = detectServices(cwd, detected);
+  const { services, excluded } = detectServices(cwd, detected);
 
   const configPath = join(cwd, "proof.config.ts");
   const jsonConfigPath = join(cwd, "proof.config.json");
@@ -101,6 +126,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const repoWorkload = detectedWorkload(cwd);
   const setup: WorkloadSetup = repoWorkload === undefined ? {} : { workload: repoWorkload };
   let workloadGenerated: InitResult["workloadGenerated"];
+  let authFixturesGenerated: InitResult["authFixturesGenerated"];
   if (!configAlreadyExisted && setup.workload === undefined) {
     const spec = findOpenApiSpec(cwd);
     if (spec !== undefined) {
@@ -124,6 +150,34 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
           routes: plan.requiredRoutes.length,
           gaps: plan.gaps,
         };
+
+        // Identidad HTTP (informe Lubrisur): si el spec declara operaciones
+        // con seguridad Y expone login público con token en la respuesta,
+        // se scaffoldea el fixture completo; sin esa evidencia, el hueco se
+        // reporta como gap accionable en vez de inventar rutas.
+        const fixturePlan = planAuthFixtures(spec.document);
+        if (fixturePlan.login !== undefined && fixturePlan.tokenProperty !== undefined) {
+          const fixtureScriptPath = join(cwd, "proof.fixtures.mjs");
+          if (!existsSync(fixtureScriptPath)) {
+            writeFileSync(
+              fixtureScriptPath,
+              renderAuthFixtureScript(fixturePlan, spec.path),
+              "utf-8",
+            );
+          }
+          setup.fixtures = { beforeAll: { command: "node", args: ["proof.fixtures.mjs"] } };
+          authFixturesGenerated = {
+            scriptPath: fixtureScriptPath,
+            loginPath: fixturePlan.login.path,
+            ...(fixturePlan.register === undefined
+              ? {}
+              : { registerPath: fixturePlan.register.path }),
+            tokenProperty: fixturePlan.tokenProperty,
+            gaps: fixturePlan.gaps,
+          };
+        } else {
+          workloadGenerated.gaps.push(...fixturePlan.gaps);
+        }
       }
     }
   }
@@ -143,17 +197,23 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
 
   const agentsPath = join(cwd, "AGENTS.md");
   const agentsResult = syncAgentsFile(agentsPath, services);
+  const gitignorePath = join(cwd, ".gitignore");
+  const gitignoreResult = ensureProofIgnored(cwd, gitignorePath);
 
   const result: InitResult = {
     detected,
     services,
+    excluded,
     configWritten,
     configPath,
     jsonConfigPath,
     jsonConfigWritten,
     agentsPath,
     agentsResult,
+    gitignorePath,
+    gitignoreResult,
     ...(workloadGenerated === undefined ? {} : { workloadGenerated }),
+    ...(authFixturesGenerated === undefined ? {} : { authFixturesGenerated }),
   };
 
   if (options.json) {
@@ -204,8 +264,18 @@ function gitIgnoredDirectories(cwd: string, relativePaths: string[]): Set<string
   );
 }
 
-/** Directorios con package.json hasta 3 niveles (sin la raíz). */
-function packageDirectories(cwd: string): string[] {
+/**
+ * Directorios con package.json hasta 3 niveles (sin la raíz). El código
+ * generado se descarta ANTES de considerarlo servicio (informe Lubrisur:
+ * el cliente Prisma en src/generated/prisma trae su propio package.json y
+ * no es una aplicación) — y cada descarte queda registrado con su razón
+ * para que `proof init` lo muestre en vez de fallar en silencio.
+ */
+function packageDirectories(
+  cwd: string,
+  generatorOutputs: readonly string[],
+  excluded: ExcludedServiceCandidate[],
+): string[] {
   const found: string[] = [];
   const visit = (relativePath: string, depth: number): void => {
     if (depth > 3) return;
@@ -215,12 +285,37 @@ function packageDirectories(cwd: string): string[] {
     const ignored = gitIgnoredDirectories(cwd, children);
     for (const child of children) {
       if (ignored.has(child)) continue;
+      const verdict = classifyGeneratedPath(child, generatorOutputs);
+      if (verdict.generated) {
+        // Registrar TODOS los package.json del subárbol generado (el cliente
+        // Prisma vive en src/generated/prisma, no en src/generated).
+        recordGeneratedPackages(cwd, child, depth, verdict.reason ?? "código generado", excluded);
+        continue;
+      }
       if (existsSync(join(cwd, child, "package.json"))) found.push(child);
       visit(child, depth + 1);
     }
   };
   visit("", 1);
   return found;
+}
+
+/** package.json dentro de un subárbol generado, para reportarlos como excluidos. */
+function recordGeneratedPackages(
+  cwd: string,
+  relativePath: string,
+  depth: number,
+  reason: string,
+  excluded: ExcludedServiceCandidate[],
+): void {
+  if (depth > 4) return;
+  if (existsSync(join(cwd, relativePath, "package.json"))) {
+    excluded.push({ path: relativePath, reason });
+    return;
+  }
+  for (const child of listDirectories(join(cwd, relativePath))) {
+    recordGeneratedPackages(cwd, `${relativePath}/${child}`, depth + 1, reason, excluded);
+  }
 }
 
 /**
@@ -398,16 +493,27 @@ function serviceKind(cwd: string, servicePath: string): "nextjs" | "node" {
   }
 }
 
+export interface ServiceDetection {
+  services: DetectedService[];
+  excluded: ExcludedServiceCandidate[];
+}
+
 export function detectServices(
   cwd: string,
   detected: InitResult["detected"],
-): DetectedService[] {
+): ServiceDetection {
   const targets = prismaTargets(detected);
+  // Los `output` declarados por los generators de los schemas FUENTE marcan
+  // qué subárboles son código generado (aunque no usen nombres obvios).
+  const generatorOutputs = targets
+    .filter((target) => target.endsWith("schema.prisma"))
+    .flatMap((target) => prismaGeneratorOutputs(cwd, join(cwd, target)));
   const used = new Set<string>();
+  const excluded: ExcludedServiceCandidate[] = [];
   const services: DetectedService[] = [];
 
   // Sub-servicios construibles: package.json + Dockerfile propio.
-  for (const path of packageDirectories(cwd)) {
+  for (const path of packageDirectories(cwd, generatorOutputs, excluded)) {
     const name = basename(path).replace(/[^a-zA-Z0-9_]/g, "_") || "service";
     const dockerfile = serviceDockerfile(cwd, path, name);
     if (dockerfile === undefined) continue;
@@ -423,7 +529,7 @@ export function detectServices(
       ...(buildArgs === undefined ? {} : { buildArgs }),
     });
   }
-  if (services.length > 0) return services;
+  if (services.length > 0) return { services, excluded };
 
   // Sin sub-servicios: la raíz como único servicio si es construible.
   if (existsSync(join(cwd, "package.json"))) {
@@ -432,21 +538,26 @@ export function detectServices(
     if (rootDockerfile !== undefined) {
       const dockerfileRelative = rootDockerfile.standard ? "Dockerfile" : rootDockerfile.dockerfile;
       const buildArgs = composeBuildArgs(cwd, dockerfileRelative);
-      return [
-        {
-          name: serviceName(".", used),
-          path: ".",
-          kind: serviceKind(cwd, "."),
-          ...(rootDockerfile.standard ? {} : { dockerfile: rootDockerfile.dockerfile }),
-          ...(schema === undefined ? {} : { prismaSchema: schema }),
-          ...(buildArgs === undefined ? {} : { buildArgs }),
-        },
-      ];
+      return {
+        services: [
+          {
+            name: serviceName(".", used),
+            path: ".",
+            kind: serviceKind(cwd, "."),
+            ...(rootDockerfile.standard ? {} : { dockerfile: rootDockerfile.dockerfile }),
+            ...(schema === undefined ? {} : { prismaSchema: schema }),
+            ...(buildArgs === undefined ? {} : { buildArgs }),
+          },
+        ],
+        excluded,
+      };
     }
   }
 
   // Último recurso: derivar del schema Prisma (comportamiento previo).
-  // doctor va a señalar el Dockerfile faltante.
+  // doctor va a señalar el Dockerfile faltante. La evidencia Prisma ya viene
+  // filtrada de copias generadas, así que ningún output (ej. src/generated)
+  // puede volver a colarse como servicio por esta vía.
   const fallbackPaths = [
     ...new Set(
       targets.map((target) => {
@@ -455,11 +566,14 @@ export function detectServices(
       }),
     ),
   ];
-  return (fallbackPaths.length > 0 ? fallbackPaths : ["."]).map((path) => ({
-    name: serviceName(path, used),
-    path,
-    kind: serviceKind(cwd, path),
-  }));
+  return {
+    services: (fallbackPaths.length > 0 ? fallbackPaths : ["."]).map((path) => ({
+      name: serviceName(path, used),
+      path,
+      kind: serviceKind(cwd, path),
+    })),
+    excluded,
+  };
 }
 
 // ------------------------------------------------------------------- workload
@@ -533,6 +647,7 @@ function buildJsonConfig(
     policies: ["no-destructive-migrations"],
     ...(setup.workload === undefined ? {} : { workload: setup.workload }),
     ...(setup.coverage === undefined ? {} : { coverage: setup.coverage }),
+    ...(setup.fixtures === undefined ? {} : { fixtures: setup.fixtures }),
     approvals: [],
   };
 }
@@ -566,11 +681,51 @@ ${renderedServices}
   flows: [],
   release: { strategy: "migration-first", rollback: "application" },
   policies: ["no-destructive-migrations"],
-${workloadBlock}${coverageBlock}  // Si la API exige identidad, prepará usuario/token vía HTTP acá:
-  // fixtures: { beforeAll: { command: "node", args: ["scripts/proof-fixtures.mjs"] } },
+${workloadBlock}${coverageBlock}${
+    setup.fixtures === undefined
+      ? "  // Si la API exige identidad, prepará usuario/token vía HTTP acá; sin\n  // registro público, sembrá la identidad con bootstrapSql (se aplica tras\n  // las migraciones, antes del workload, y su digest queda en el Bundle):\n  // fixtures: { beforeAll: { command: \"node\", args: [\"proof.fixtures.mjs\"] }, bootstrapSql: \"proof.seed.sql\" },\n"
+      : `  fixtures: ${JSON.stringify(setup.fixtures)},\n`
+  }  // proof doctor clasifica las variables de .env.example por uso real del
+  // código; si sabe más que la heurística, declaralo:
+  // env: { required: ["DATABASE_URL"], optional: ["ARCA_API_KEY"] },
   approvals: [],
 };
 `;
+}
+
+// ------------------------------------------------------------------ .gitignore
+
+/**
+ * `.proof/` contiene evidencia local (bundles, claves de firma), nunca
+ * configuración: no debe versionarse (informe Lubrisur: el bundle quedó como
+ * archivo sin trackear). Idempotente por dos vías: si el engine de Git ya lo
+ * ignora (regla local, global o anidada) no se toca nada; si no, se agrega
+ * una única línea `.proof/` al .gitignore de la raíz.
+ */
+export function ensureProofIgnored(
+  cwd: string,
+  gitignorePath: string,
+): "created" | "updated" | "unchanged" {
+  const probe = spawnSync("git", ["check-ignore", "-q", ".proof/probe"], {
+    cwd,
+    encoding: "utf-8",
+    windowsHide: true,
+  });
+  if (probe.status === 0) return "unchanged";
+
+  const managedBlock = "# Evidencia local de Proof (proof release verify)\n.proof/\n";
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(gitignorePath, managedBlock, "utf-8");
+    return "created";
+  }
+  const current = readFileSync(gitignorePath, "utf-8");
+  // Cobertura sin git instalado: una línea equivalente ya presente alcanza.
+  const alreadyListed = current
+    .split(/\r?\n/)
+    .some((line) => /^\/?\.proof\/?$/.test(line.trim()));
+  if (alreadyListed) return "unchanged";
+  writeFileSync(gitignorePath, `${current.replace(/\n*$/, "\n\n")}${managedBlock}`, "utf-8");
+  return "updated";
 }
 
 // ------------------------------------------------------------------ AGENTS.md
@@ -607,6 +762,12 @@ or call \`proof_release_plan\` over MCP. A plan always returns
 its typed \`nextCommand\`. When execution is required, run
 \`proof release verify\` (or \`proof_release_verify\`) and cite the resulting
 Bundle.${serviceFlag}
+
+While iterating on UNCOMMITTED local changes, run
+\`proof release verify --worktree --base-sha <deployed-sha>\` (trusted profile
+only): Proof freezes the working tree into an immutable snapshot commit and
+verifies that exact content. Use it to iterate; a merge/release gate still
+requires verifying a pushed commit.
 
 For untrusted forks use \`--profile fork\` on a secretless isolated runner and
 keep \`PROOF_EXECUTION_PROFILE_LOCKED=fork\`. Never downgrade a locked profile.
@@ -669,6 +830,11 @@ function printHuman(result: InitResult): void {
         .join(", ") || "(ninguno)"
     }\n`,
   );
+  for (const candidate of result.excluded) {
+    process.stdout.write(
+      `${symbols.dot} ${paint.dim(`Descartado como servicio: ${candidate.path} — ${candidate.reason}.`)}\n`,
+    );
+  }
   process.stdout.write(
     result.configWritten
       ? `${symbols.ok} Generated: ${result.configPath}\n`
@@ -688,6 +854,13 @@ function printHuman(result: InitResult): void {
         ? `${symbols.ok} Updated: ${result.agentsPath} ${paint.dim("(bloque gestionado de Proof)")}\n`
         : `${symbols.dot} ${paint.dim(`${result.agentsPath} ya está al día.`)}\n`,
   );
+  process.stdout.write(
+    result.gitignoreResult === "created"
+      ? `${symbols.ok} Generated: ${result.gitignorePath} ${paint.dim("(.proof/ es evidencia local, nunca se versiona)")}\n`
+      : result.gitignoreResult === "updated"
+        ? `${symbols.ok} Updated: ${result.gitignorePath} ${paint.dim("(agregado .proof/)")}\n`
+        : `${symbols.dot} ${paint.dim(".proof/ ya está ignorado por Git.")}\n`,
+  );
   if (result.workloadGenerated !== undefined) {
     const generated = result.workloadGenerated;
     process.stdout.write(
@@ -696,6 +869,17 @@ function printHuman(result: InitResult): void {
       )}\n`,
     );
     for (const gap of generated.gaps) {
+      process.stdout.write(`  ${symbols.warn} ${paint.yellow(gap)}\n`);
+    }
+  }
+  if (result.authFixturesGenerated !== undefined) {
+    const fixtures = result.authFixturesGenerated;
+    process.stdout.write(
+      `${symbols.ok} Generated: ${fixtures.scriptPath} ${paint.dim(
+        `(identidad HTTP: ${fixtures.registerPath === undefined ? "" : `${fixtures.registerPath} → `}${fixtures.loginPath}, token en "${fixtures.tokenProperty}")`,
+      )}\n`,
+    );
+    for (const gap of fixtures.gaps) {
       process.stdout.write(`  ${symbols.warn} ${paint.yellow(gap)}\n`);
     }
   }

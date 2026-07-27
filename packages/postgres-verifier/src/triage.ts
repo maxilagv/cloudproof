@@ -17,7 +17,7 @@ import type { ExecutionState } from "@proof/schema";
  */
 
 export const TRIAGE_DURATION_BUDGET_MS = 120_000;
-export const TRIAGE_RULESET_VERSION = "release-triage/2026-07-15.1";
+export const TRIAGE_RULESET_VERSION = "release-triage/2026-07-23.1";
 
 const MAX_COMMAND_STDOUT_BYTES = 2 * 1024 * 1024;
 const MAX_COMMAND_STDERR_BYTES = 64 * 1024;
@@ -56,6 +56,15 @@ export interface TriageChangedFile {
   previousPath?: string;
   baseContentSha256?: string;
   headContentSha256?: string;
+}
+
+export interface TriageImpactedHttpRoute {
+  /** Framework route template, for example `/api/catalogo/[id]`. */
+  path: string;
+  /** Exported HTTP methods when they can be derived; empty means any method. */
+  methods: string[];
+  files: string[];
+  detector: "next-app-router" | "next-pages-api";
 }
 
 export interface TriageEvidence {
@@ -127,6 +136,8 @@ export interface ReleaseTriagePlan {
     byCategory: Record<ChangeCategory, number>;
     files: TriageChangedFile[];
     filesTruncated: boolean;
+    /** HTTP surface derived from changed framework route entrypoints. */
+    impactedHttpRoutes: TriageImpactedHttpRoute[];
   };
   reasons: TriageReason[];
   security: {
@@ -210,7 +221,7 @@ const TARGETED_MATRIX: RequiredMatrixState[] = [
   "BUILD_A1",
   "A0_S0",
   "A1_S0",
-  "A1_S1",
+  "SQL_EFFECTS",
 ];
 
 function emptyCategoryCounts(): Record<ChangeCategory, number> {
@@ -253,6 +264,55 @@ function isPrismaSchema(path: string, configured?: string): boolean {
     /(^|\/)schema\.prisma$/i.test(path) ||
     /(^|\/)prisma\/schema\/.*\.prisma$/i.test(path)
   );
+}
+
+const HTTP_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
+
+function impactedHttpRoute(file: InspectedFile): TriageImpactedHttpRoute | undefined {
+  const path = normalizeRepoPath(file.path);
+  const appMatch = /(?:^|\/)(?:src\/)?app\/(.+)\/route\.(?:[cm]?[jt]sx?)$/i.exec(path);
+  const pagesMatch = /(?:^|\/)(?:src\/)?pages\/api\/(.+)\.(?:[cm]?[jt]sx?)$/i.exec(path);
+  let routePath: string;
+  let detector: TriageImpactedHttpRoute["detector"];
+  if (appMatch?.[1] !== undefined) {
+    const segments = appMatch[1]
+      .split("/")
+      .filter((segment) => !/^\(.+\)$/.test(segment) && !segment.startsWith("@"));
+    routePath = `/${segments.join("/")}`;
+    detector = "next-app-router";
+  } else if (pagesMatch?.[1] !== undefined) {
+    const leaf = pagesMatch[1].replace(/\/index$/i, "");
+    routePath = `/api${leaf === "" ? "" : `/${leaf}`}`;
+    detector = "next-pages-api";
+  } else {
+    return undefined;
+  }
+
+  const content = file.head?.content ?? file.base?.content ?? "";
+  const methods = HTTP_METHODS.filter((method) =>
+    new RegExp(
+      `(?:export\\s+(?:async\\s+)?function\\s+${method}\\b|export\\s+(?:const|let|var)\\s+${method}\\b|export\\s*\\{[^}]*\\b${method}\\b[^}]*\\})`,
+      "m",
+    ).test(content),
+  );
+  return { path: routePath, methods: [...methods], files: [path], detector };
+}
+
+function impactedHttpRoutes(files: InspectedFile[]): TriageImpactedHttpRoute[] {
+  const routes = new Map<string, TriageImpactedHttpRoute>();
+  for (const file of files) {
+    const route = impactedHttpRoute(file);
+    if (route === undefined) continue;
+    const key = `${route.detector}\u0000${route.path}`;
+    const existing = routes.get(key);
+    if (existing === undefined) {
+      routes.set(key, route);
+      continue;
+    }
+    existing.files = [...new Set([...existing.files, ...route.files])].sort();
+    existing.methods = [...new Set([...existing.methods, ...route.methods])].sort();
+  }
+  return [...routes.values()].sort((left, right) => left.path.localeCompare(right.path));
 }
 
 function categoryFor(path: string, servicePath?: string, prismaSchemaPath?: string): ChangeCategory {
@@ -720,56 +780,211 @@ function inspectSql(state: PlanningState, file: InspectedFile): void {
   }
 }
 
-function normalizedPrismaLines(content: string): Set<string> {
-  return new Set(
-    content
-      .split("\n")
-      .map((line) => line.replace(/\/\/.*$/, "").trim())
-      .filter(Boolean),
-  );
+// ------------------------------------------------- diff semántico de Prisma
+
+/**
+ * Diff SEMÁNTICO de schemas Prisma (informe Bs As Neumáticos 2026-07): el
+ * diff por conjuntos de líneas marcaba `Payment.amount` como campo nuevo
+ * cuando solo se re-alineó el espaciado interior de la línea. Un finding de
+ * riesgo debe salir de comparar MODELOS Y CAMPOS parseados, nunca strings:
+ * re-alinear columnas, reordenar atributos o mover un campo dentro del
+ * bloque no cambia el contrato con la base y no puede generar un HIGH.
+ */
+
+export interface PrismaFieldShape {
+  name: string;
+  /** Tipo sin `?` ni `[]` (ej. "Decimal"). */
+  type: string;
+  optional: boolean;
+  list: boolean;
+  /** Atributos del campo con espacios colapsados (ej. `@default(0) @map("a")`). */
+  attributes: string;
+  /** Línea 1-based dentro del archivo del que se parseó. */
+  line: number;
+  raw: string;
+}
+
+export interface PrismaModelShape {
+  name: string;
+  line: number;
+  fields: Map<string, PrismaFieldShape>;
+  /** Atributos de bloque (`@@unique`, `@@index`, …) sin whitespace, para comparar. */
+  blockAttributes: Map<string, { line: number; raw: string }>;
+}
+
+export function parsePrismaModels(content: string): Map<string, PrismaModelShape> {
+  const models = new Map<string, PrismaModelShape>();
+  let current: PrismaModelShape | undefined;
+  content.split("\n").forEach((rawLine, zeroBasedLine) => {
+    const line = rawLine.replace(/\/\/.*$/, "").trim();
+    if (line === "") return;
+    const modelStart = /^model\s+(\w+)\s*\{/.exec(line)?.[1];
+    if (modelStart !== undefined) {
+      current = {
+        name: modelStart,
+        line: zeroBasedLine + 1,
+        fields: new Map(),
+        blockAttributes: new Map(),
+      };
+      models.set(modelStart, current);
+      return;
+    }
+    if (line === "}") {
+      current = undefined;
+      return;
+    }
+    if (current === undefined) return;
+    if (line.startsWith("@@")) {
+      current.blockAttributes.set(line.replace(/\s+/g, ""), {
+        line: zeroBasedLine + 1,
+        raw: rawLine,
+      });
+      return;
+    }
+    const field = /^(\w+)\s+([A-Za-z_][\w.]*(?:\[\])?\??)(?:\s+(.*))?$/.exec(line);
+    if (field?.[1] === undefined || field[2] === undefined) return;
+    const declaredType = field[2];
+    current.fields.set(field[1], {
+      name: field[1],
+      type: declaredType.replace(/\[\]|\?/g, ""),
+      optional: declaredType.endsWith("?"),
+      list: declaredType.includes("[]"),
+      attributes: (field[3] ?? "").replace(/\s+/g, " ").trim(),
+      line: zeroBasedLine + 1,
+      raw: rawLine,
+    });
+  });
+  return models;
+}
+
+const PRISMA_SCALAR_TYPES = new Set([
+  "String",
+  "Int",
+  "BigInt",
+  "Float",
+  "Decimal",
+  "Boolean",
+  "DateTime",
+  "Json",
+  "Bytes",
+]);
+
+export interface PrismaSemanticFinding {
+  code: "PRISMA_REQUIRED_FIELD_ADDED" | "PRISMA_FIELD_MADE_REQUIRED" | "PRISMA_UNIQUE_ADDED";
+  risk: "high";
+  title: string;
+  detail: string;
+  line: number;
+  raw: string;
+}
+
+function hasDefaultLikeAttribute(field: PrismaFieldShape): boolean {
+  return /@(?:default\s*\(|id\b|updatedAt\b)/.test(field.attributes);
+}
+
+function hasFieldUnique(field: PrismaFieldShape): boolean {
+  return /@unique\b/.test(field.attributes);
+}
+
+/**
+ * Findings puros por comparación de formas parseadas. Solo los modelos que
+ * EXISTEN en base generan riesgo A0/S1: un modelo nuevo es una tabla nueva
+ * que la app desplegada no consulta.
+ */
+export function prismaSemanticFindings(
+  baseContent: string,
+  headContent: string,
+): PrismaSemanticFinding[] {
+  const findings: PrismaSemanticFinding[] = [];
+  const baseModels = parsePrismaModels(baseContent);
+  for (const headModel of parsePrismaModels(headContent).values()) {
+    const baseModel = baseModels.get(headModel.name);
+    if (baseModel === undefined) continue;
+
+    for (const headField of headModel.fields.values()) {
+      const baseField = baseModel.fields.get(headField.name);
+      const requiredScalar =
+        PRISMA_SCALAR_TYPES.has(headField.type) &&
+        !headField.optional &&
+        !hasDefaultLikeAttribute(headField);
+      if (baseField === undefined) {
+        if (requiredScalar) {
+          findings.push({
+            code: "PRISMA_REQUIRED_FIELD_ADDED",
+            risk: "high",
+            title: "Campo obligatorio agregado en Prisma",
+            detail:
+              "Un campo requerido sin default visible necesita expand/backfill/contract y prueba de A0 sobre S1.",
+            line: headField.line,
+            raw: headField.raw,
+          });
+        }
+        if (hasFieldUnique(headField)) {
+          findings.push({
+            code: "PRISMA_UNIQUE_ADDED",
+            risk: "high",
+            title: "Unicidad agregada en Prisma",
+            detail: "La unicidad requiere preflight de duplicados y prueba sobre datos poblados.",
+            line: headField.line,
+            raw: headField.raw,
+          });
+        }
+        continue;
+      }
+      if (baseField.optional && requiredScalar) {
+        findings.push({
+          code: "PRISMA_FIELD_MADE_REQUIRED",
+          risk: "high",
+          title: "Campo existente pasó de opcional a requerido",
+          detail:
+            "Volver NOT NULL un campo existente exige backfill demostrado y compatibilidad de A0 durante la ventana mixta.",
+          line: headField.line,
+          raw: headField.raw,
+        });
+      }
+      if (!hasFieldUnique(baseField) && hasFieldUnique(headField)) {
+        findings.push({
+          code: "PRISMA_UNIQUE_ADDED",
+          risk: "high",
+          title: "Unicidad agregada en Prisma",
+          detail: "La unicidad requiere preflight de duplicados y prueba sobre datos poblados.",
+          line: headField.line,
+          raw: headField.raw,
+        });
+      }
+    }
+
+    for (const [normalized, attribute] of headModel.blockAttributes) {
+      if (!normalized.startsWith("@@unique")) continue;
+      if (baseModel.blockAttributes.has(normalized)) continue;
+      findings.push({
+        code: "PRISMA_UNIQUE_ADDED",
+        risk: "high",
+        title: "Unicidad agregada en Prisma",
+        detail: "La unicidad requiere preflight de duplicados y prueba sobre datos poblados.",
+        line: attribute.line,
+        raw: attribute.raw,
+      });
+    }
+  }
+  return findings;
 }
 
 function inspectPrisma(state: PlanningState, file: InspectedFile): void {
   const head = file.head?.content;
   if (head === undefined) return;
-  const baseLines = normalizedPrismaLines(file.base?.content ?? "");
-  const baseModels = new Set(
-    [...(file.base?.content ?? "").matchAll(/^\s*model\s+(\w+)\s*\{/gim)]
-      .map((match) => match[1])
-      .filter((model): model is string => model !== undefined),
-  );
-  const lines = head.split("\n");
-  let currentModel: string | undefined;
-  lines.forEach((rawLine, zeroBasedLine) => {
-    const line = rawLine.replace(/\/\/.*$/, "").trim();
-    const modelStart = /^model\s+(\w+)\s*\{/.exec(line)?.[1];
-    if (modelStart !== undefined) currentModel = modelStart;
-    if (line === "}") currentModel = undefined;
-    if (line === "" || baseLines.has(line)) return;
-    const existingModel = currentModel !== undefined && baseModels.has(currentModel);
-    if (existingModel && (/^@@?unique\b/.test(line) || /@unique\b/.test(line))) {
-      addReason(state, {
-        code: "PRISMA_UNIQUE_ADDED",
-        risk: "high",
-        title: "Unicidad agregada en Prisma",
-        detail: "La unicidad requiere preflight de duplicados y prueba sobre datos poblados.",
-        evidence: [{ path: file.path, side: "head", line: zeroBasedLine + 1, excerpt: safeExcerpt(rawLine) }],
-      });
-    }
-    if (
-      existingModel &&
-      /^\w+\s+(?:String|Int|BigInt|Float|Decimal|Boolean|DateTime|Json|Bytes)(?:\[\])?\s*(?:@|$)/.test(line) &&
-      !/^\w+\s+\S+\?/.test(line) &&
-      !/@(?:default|id)\b/.test(line)
-    ) {
-      addReason(state, {
-        code: "PRISMA_REQUIRED_FIELD_ADDED",
-        risk: "high",
-        title: "Campo obligatorio agregado en Prisma",
-        detail: "Un campo requerido sin default visible necesita expand/backfill/contract y prueba de A0 sobre S1.",
-        evidence: [{ path: file.path, side: "head", line: zeroBasedLine + 1, excerpt: safeExcerpt(rawLine) }],
-      });
-    }
+  for (const finding of prismaSemanticFindings(file.base?.content ?? "", head)) {
+    addReason(state, {
+      code: finding.code,
+      risk: finding.risk,
+      title: finding.title,
+      detail: finding.detail,
+      evidence: [
+        { path: file.path, side: "head", line: finding.line, excerpt: safeExcerpt(finding.raw) },
+      ],
+    });
+  }
+  head.split("\n").forEach((line) => {
     if (/\b(?:email|phone|address|password|passwd|secret|token|ssn|dni|document|birth|health|card)\b/i.test(line)) {
       state.privacyFlags.add("SENSITIVE_SCHEMA_SIGNAL");
     }
@@ -1305,7 +1520,12 @@ export async function planRelease(
       }))
       .sort((left, right) => left.path.localeCompare(right.path));
 
-    const contentFiles = files.filter((file) => shouldReadContent(file.category));
+    // Route entrypoints are read even though ordinary application files are
+    // not: exported methods let verify correlate the changed HTTP surface
+    // with traffic instead of trusting an unrelated declared route universe.
+    const contentFiles = files.filter(
+      (file) => shouldReadContent(file.category) || impactedHttpRoute(file) !== undefined,
+    );
     if (contentFiles.length > MAX_CONTENT_FILES) {
       state.complete = false;
       state.diagnostics.push(
@@ -1404,6 +1624,7 @@ export async function planRelease(
       byCategory,
       files: publicFiles,
       filesTruncated: files.length > MAX_PUBLIC_CHANGED_FILES,
+      impactedHttpRoutes: impactedHttpRoutes(files),
     },
     reasons,
     security: {

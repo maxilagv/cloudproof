@@ -295,7 +295,14 @@ export class ComposeExecutor implements DockerExecutor {
 
   async buildImage(spec: BuildSpec): Promise<string> {
     const worktree = await this.worktrees.ensure(spec.sha);
-    const build = this.resolveBuild(worktree, spec);
+    // Onboarding: la RECETA puede venir de otro commit (el candidato agrega
+    // el Dockerfile que el base desplegado no tiene); las fuentes siguen
+    // saliendo del worktree de spec.sha.
+    const dockerfileWorktree =
+      spec.dockerfileFromSha === undefined || spec.dockerfileFromSha === spec.sha
+        ? worktree
+        : await this.worktrees.ensure(spec.dockerfileFromSha);
+    const build = this.resolveBuild(worktree, dockerfileWorktree, spec);
     assertSafeBuildArgs(spec.buildArgs ?? {}, this.executionProfile);
     const dockerfileContents = readFileSync(build.dockerfile, "utf8");
     if (this.executionProfile === "fork") {
@@ -323,6 +330,11 @@ export class ComposeExecutor implements DockerExecutor {
         JSON.stringify({
           servicePath: spec.servicePath,
           dockerfile: build.dockerfileRel,
+          // Solo presente cuando la receta viene de otro commit: así los tags
+          // históricos (y sus réplicas en tests) no cambian de identidad.
+          ...(spec.dockerfileFromSha === undefined
+            ? {}
+            : { dockerfileFromSha: spec.dockerfileFromSha }),
           context: build.contextRel,
           buildArgs,
           buildNetwork: this.policy.buildNetwork,
@@ -396,53 +408,73 @@ export class ComposeExecutor implements DockerExecutor {
     }
   }
 
-  /** Resuelve Dockerfile y contexto de build (explícitos o inferidos). */
+  /**
+   * Resuelve Dockerfile y contexto de build (explícitos o inferidos). La
+   * receta se busca en `dockerfileWorktree` (normalmente el mismo worktree;
+   * distinto cuando dockerfileFromSha apunta al candidato) y las fuentes en
+   * `worktree`.
+   */
   private resolveBuild(
     worktree: string,
+    dockerfileWorktree: string,
     spec: BuildSpec,
   ): { dockerfile: string; context: string; dockerfileRel: string; contextRel: string } {
+    // Salida legítima para el onboarding (informe Bs As Neumáticos): cuando
+    // el commit base no contiene el Dockerfile, el error debe enseñar el
+    // camino en vez de cerrar la puerta.
+    const onboardingHint =
+      spec.dockerfileFromSha === undefined
+        ? " Si el Dockerfile fue agregado por el candidato (onboarding a Docker), declará " +
+          'services.<nombre>.dockerfileFrom: "head" para construir ambos lados con la receta ' +
+          "del candidato; el Bundle registrará esa procedencia."
+        : "";
     let dockerfile: string;
     if (spec.dockerfile !== undefined) {
-      dockerfile = this.worktreePath(worktree, spec.dockerfile, "dockerfile");
+      dockerfile = this.worktreePath(dockerfileWorktree, spec.dockerfile, "dockerfile");
       if (!existsSync(dockerfile)) {
         throw new ExecutorError(
-          `El commit ${spec.sha} no contiene el Dockerfile declarado en services.<nombre>.dockerfile: ${spec.dockerfile}`,
+          `El commit ${spec.dockerfileFromSha ?? spec.sha} no contiene el Dockerfile declarado ` +
+            `en services.<nombre>.dockerfile: ${spec.dockerfile}.${onboardingHint}`,
         );
       }
-      this.assertRealPathInWorktree(worktree, dockerfile, "dockerfile");
+      this.assertRealPathInWorktree(dockerfileWorktree, dockerfile, "dockerfile");
     } else {
-      const serviceRoot = this.worktreePath(worktree, spec.servicePath, "servicePath");
+      const serviceRoot = this.worktreePath(dockerfileWorktree, spec.servicePath, "servicePath");
       const serviceDockerfile = join(serviceRoot, "Dockerfile");
-      const rootDockerfile = join(worktree, "Dockerfile");
+      const rootDockerfile = join(dockerfileWorktree, "Dockerfile");
       if (existsSync(serviceDockerfile)) {
         dockerfile = serviceDockerfile;
       } else if (existsSync(rootDockerfile)) {
         dockerfile = rootDockerfile;
       } else {
         throw new ExecutorError(
-          `No se encontró Dockerfile ni en ${serviceRoot} ni en la raíz del worktree para el SHA ${spec.sha}. ` +
+          `No se encontró Dockerfile ni en ${serviceRoot} ni en la raíz del worktree para el SHA ${spec.dockerfileFromSha ?? spec.sha}. ` +
             `Si el repo usa un nombre/ubicación no convencional (ej. docker/Dockerfile.web), ` +
-          `declaralo en services.<nombre>.dockerfile de proof.config.ts.`,
+            `declaralo en services.<nombre>.dockerfile de proof.config.ts.${onboardingHint}`,
         );
       }
-      this.assertRealPathInWorktree(worktree, dockerfile, "dockerfile");
+      this.assertRealPathInWorktree(dockerfileWorktree, dockerfile, "dockerfile");
     }
+    const dockerfileRel = relative(dockerfileWorktree, dockerfile).replace(/\\/g, "/");
 
     const context =
       spec.buildContext !== undefined
         ? this.worktreePath(worktree, spec.buildContext, "buildContext")
-        : this.inferBuildContext(worktree, dockerfile);
+        : this.inferBuildContext(worktree, dockerfile, dockerfileRel);
     this.assertRealPathInWorktree(worktree, context, "buildContext");
-    for (const ignoreFile of [join(context, ".dockerignore"), `${dockerfile}.dockerignore`]) {
-      if (existsSync(ignoreFile)) {
-        this.assertRealPathInWorktree(worktree, ignoreFile, "dockerignore");
-      }
+    const contextIgnore = join(context, ".dockerignore");
+    if (existsSync(contextIgnore)) {
+      this.assertRealPathInWorktree(worktree, contextIgnore, "dockerignore");
+    }
+    const dockerfileIgnore = `${dockerfile}.dockerignore`;
+    if (existsSync(dockerfileIgnore)) {
+      this.assertRealPathInWorktree(dockerfileWorktree, dockerfileIgnore, "dockerignore");
     }
 
     return {
       dockerfile,
       context,
-      dockerfileRel: relative(worktree, dockerfile).replace(/\\/g, "/"),
+      dockerfileRel,
       contextRel: relative(worktree, context).replace(/\\/g, "/") || ".",
     };
   }
@@ -455,9 +487,13 @@ export class ComposeExecutor implements DockerExecutor {
    * como `docker build -f apps/web/Dockerfile .`) y el contexto es la raíz.
    * La decisión se basa solo en evidencia del filesystem, no en heurísticas
    * de contenido.
+   *
+   * `dockerfileRel` permite mapear la carpeta de la receta sobre el worktree
+   * de FUENTES cuando la receta vive en otro worktree (dockerfileFromSha):
+   * el contexto siempre se evalúa contra las fuentes que se van a copiar.
    */
-  private inferBuildContext(worktree: string, dockerfile: string): string {
-    const dockerfileDir = dirname(dockerfile);
+  private inferBuildContext(worktree: string, dockerfile: string, dockerfileRel: string): string {
+    const dockerfileDir = join(worktree, dirname(dockerfileRel));
     if (resolve(dockerfileDir) === resolve(worktree)) return worktree;
 
     for (const source of copySources(readFileSync(dockerfile, "utf-8"))) {
@@ -562,6 +598,11 @@ export class ComposeExecutor implements DockerExecutor {
         spec.servicePath,
         spec.prismaSchema,
       );
+      // Bootstrap de identidad/datos de referencia: solo en bases NO
+      // clonadas — los clones ya lo heredan del origen (S0 seed).
+      if (spec.bootstrapSql !== undefined && spec.cloneFromContainerId === undefined) {
+        await this.applyBootstrapSql(id, spec.label, spec.bootstrapSql);
+      }
 
       return {
         id,
@@ -596,6 +637,64 @@ export class ComposeExecutor implements DockerExecutor {
           detail: probe.detail,
         }),
     });
+  }
+
+  /**
+   * Aplica el bootstrap SQL declarado en fixtures.bootstrapSql dentro del
+   * contenedor (informe Bs As Neumáticos 2026-07: sin signup público no
+   * había forma legítima de crear la identidad inicial). Corre después de
+   * `migrate deploy` y antes de que arranque cualquier app: es preparación
+   * de entorno, análoga a una migración — la regla "las escrituras del
+   * workload son HTTP observables" no se toca. ON_ERROR_STOP: un bootstrap
+   * a medias no es un entorno válido.
+   */
+  private async applyBootstrapSql(
+    containerId: string,
+    label: string,
+    hostPath: string,
+  ): Promise<void> {
+    let contents: Buffer;
+    try {
+      contents = readFileSync(hostPath);
+    } catch {
+      throw new ExecutorError(
+        `fixtures.bootstrapSql no pudo leerse desde el host: ${hostPath}`,
+      );
+    }
+    if (contents.byteLength === 0 || contents.byteLength > 5 * 1024 * 1024) {
+      throw new ExecutorError(
+        `fixtures.bootstrapSql debe tener entre 1 byte y 5 MiB (tiene ${contents.byteLength}).`,
+      );
+    }
+    if (contents.includes(0)) {
+      throw new ExecutorError("fixtures.bootstrapSql parece binario; se espera SQL en texto plano.");
+    }
+    const containerPath = `/tmp/proof-bootstrap-${randomUUID().slice(0, 8)}.sql`;
+    try {
+      await this.dockerOk(
+        ["cp", hostPath, `${containerId}:${containerPath}`],
+        `copia del bootstrap SQL hacia ${label}`,
+      );
+      await this.dockerOk(
+        [
+          "exec",
+          containerId,
+          "psql",
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-U",
+          "proof",
+          "-d",
+          "proof",
+          "-f",
+          containerPath,
+        ],
+        `bootstrap SQL (${label}) tras migrate deploy`,
+        this.migrateTimeoutMs,
+      );
+    } finally {
+      await this.docker(["exec", containerId, "rm", "-f", containerPath]).catch(() => undefined);
+    }
   }
 
   private async restorePostgresClone(sourceId: string, targetId: string): Promise<void> {

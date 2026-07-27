@@ -16,6 +16,14 @@ export interface BuildSpec {
    */
   dockerfile?: string;
   /**
+   * SHA cuyo worktree provee el CONTENIDO del Dockerfile cuando difiere de
+   * `sha` (caso onboarding: el candidato agrega el Dockerfile y el commit
+   * base no lo tiene). Las fuentes del build siguen saliendo del worktree
+   * de `sha`; solo la receta viene del otro commit — inmutable igual,
+   * porque ese SHA también es content-addressed.
+   */
+  dockerfileFromSha?: string;
+  /**
    * Contexto de build worktree-relativo. Default: inferido analizando los
    * COPY/ADD del Dockerfile (patrón Turborepo: contexto en la raíz).
    */
@@ -34,6 +42,14 @@ export interface EphemeralPostgresSpec {
   prismaSchema?: string;
   /** Si existe, S1 se restaura desde este Postgres antes de migrar. */
   cloneFromContainerId?: string;
+  /**
+   * Ruta HOST-absoluta a un .sql de bootstrap (identidad/datos de
+   * referencia) que se aplica dentro del contenedor, con ON_ERROR_STOP,
+   * inmediatamente después de las migraciones. Solo aplica en bases NO
+   * clonadas: los clones ya lo heredan del origen. Es preparación de
+   * entorno (como una migración), no workload.
+   */
+  bootstrapSql?: string;
 }
 
 export interface SqlEffectCounters {

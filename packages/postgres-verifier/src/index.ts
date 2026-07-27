@@ -17,8 +17,13 @@ export { deriveNextActions, type NextActionContext } from "./next-actions.js";
 export type { MatrixState, MatrixStateId } from "./matrix.js";
 export {
   planRelease,
+  parsePrismaModels,
+  prismaSemanticFindings,
   TRIAGE_DURATION_BUDGET_MS,
   TRIAGE_RULESET_VERSION,
+  type PrismaFieldShape,
+  type PrismaModelShape,
+  type PrismaSemanticFinding,
   type AssuranceLevel,
   type ChangeCategory,
   type ChangeStatus,

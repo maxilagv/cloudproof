@@ -12,12 +12,14 @@ import {
   type TriageCommand,
 } from "@proof/postgres-verifier";
 import { paint, severityLabel } from "../ui.js";
+import { createWorktreeSnapshot } from "../worktree-snapshot.js";
 
 export interface ReleasePlanOptions {
   json?: boolean;
   cwd?: string;
   baseSha: string;
-  headSha: string;
+  headSha?: string;
+  worktree?: boolean;
   service?: string;
   profile?: ExecutionProfile;
   writeOutput?: (text: string) => void;
@@ -108,6 +110,18 @@ export async function runReleasePlan(options: ReleasePlanOptions): Promise<Relea
   const requestedProfile =
     options.profile === undefined ? undefined : ExecutionProfileSchema.parse(options.profile);
   const executionProfile = resolveExecutionProfile(requestedProfile);
+  if (options.worktree === true && options.headSha !== undefined) {
+    throw new Error("Usa --head-sha o --worktree, no ambos.");
+  }
+  if (options.worktree !== true && options.headSha === undefined) {
+    throw new Error("Falta el candidato: usa --head-sha <sha> o --worktree.");
+  }
+  if (options.worktree === true && executionProfile !== "trusted") {
+    throw new Error("--worktree solo está permitido con el perfil trusted; internal/fork requieren un commit candidato publicado.");
+  }
+  const snapshot = options.worktree === true ? await createWorktreeSnapshot(cwd) : undefined;
+  const headSha = snapshot?.headSha ?? options.headSha;
+  if (headSha === undefined) throw new Error("No se pudo resolver el snapshot candidato.");
   let service: { name: string; config: ServiceConfig } | undefined;
   let configurationError: string | undefined;
   try {
@@ -118,7 +132,7 @@ export async function runReleasePlan(options: ReleasePlanOptions): Promise<Relea
 
   const plan = await planRelease({
     baseSha: options.baseSha,
-    headSha: options.headSha,
+    headSha,
     cwd,
     executionProfile,
     ...(service === undefined
@@ -135,6 +149,32 @@ export async function runReleasePlan(options: ReleasePlanOptions): Promise<Relea
         ? { loaded: true }
         : { loaded: false, error: configurationError },
   });
+
+  // Preserve development provenance across the plan -> verify hand-off.
+  // Passing only the synthetic SHA would make the next command look like a
+  // published candidate commit. `--worktree` snapshots again (same content
+  // => same deterministic SHA) and marks the Bundle developmentOnly.
+  if (snapshot !== undefined) {
+    const keepWorktreeSource = (command: TriageCommand): TriageCommand => {
+      if (command.args[0] !== "release" || command.args[1] !== "verify") return command;
+      const args: string[] = [];
+      for (let index = 0; index < command.args.length; index += 1) {
+        if (command.args[index] === "--head-sha") {
+          index += 1;
+          continue;
+        }
+        args.push(command.args[index] as string);
+      }
+      if (!args.includes("--worktree")) args.push("--worktree");
+      return {
+        ...command,
+        args,
+        reason: `${command.reason} El candidato se volverá a congelar como snapshot de desarrollo inmutable.`,
+      };
+    };
+    plan.nextCommand = keepWorktreeSource(plan.nextCommand);
+    plan.nextActions = plan.nextActions.map(keepWorktreeSource);
+  }
 
   const writeOutput = options.writeOutput ?? ((text: string) => process.stdout.write(text));
   writeOutput(options.json === true ? `${JSON.stringify(plan, null, 2)}\n` : renderReleasePlan(plan));

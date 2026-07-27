@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Detector, DetectionResult } from "@proof/plugin-sdk";
+import { generatedSegmentOf, type Detector, type DetectionResult } from "@proof/plugin-sdk";
 
 export const postgresDetector: Detector = {
   id: "postgres",
@@ -42,6 +42,9 @@ export const postgresDetector: Detector = {
       if (depth > 5) return;
       for (const entry of requireDirectories(directory)) {
         if (["node_modules", ".git", "dist", ".next", ".turbo"].includes(entry)) continue;
+        // Los outputs de generadores (ej. el cliente Prisma en src/generated)
+        // copian schema.prisma; no son evidencia del schema fuente del repo.
+        if (generatedSegmentOf(entry) !== undefined) continue;
         const child = join(directory, entry);
         if (entry === "prisma") {
           const schema = join(child, "schema.prisma");

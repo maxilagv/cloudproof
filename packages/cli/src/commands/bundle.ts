@@ -459,7 +459,10 @@ export function runBundleInspect(
       ? `  ${symbols.dot} attestation presente ${paint.dim(`(verificala con proof bundle verify)`)}`
       : `  ${symbols.dot} ${paint.dim("sin attestation — firmá con proof bundle sign")}`,
   );
-  const matrixCells = renderMatrixCells(bundle.assertions);
+  const matrixCells = renderMatrixCells(
+    bundle.assertions,
+    bundle.provenance.artifacts.find((artifact) => artifact.startsWith("matrix=")),
+  );
   if (matrixCells.length > 0) {
     lines.push("", paint.bold("Matriz de ejecución:"), ...matrixCells);
   }

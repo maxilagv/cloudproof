@@ -72,6 +72,17 @@ export const ServiceSchema = z.object({
    */
   dockerfile: RepoRelativePathSchema.optional(),
   /**
+   * De qué commit sale el CONTENIDO del Dockerfile (informe Bs As
+   * Neumáticos 2026-07). Default "commit": cada lado se construye con el
+   * Dockerfile de su propio commit — inmutabilidad estricta. "head" cubre el
+   * onboarding real: el candidato AGREGA el Dockerfile y el commit base
+   * desplegado no lo tiene; ambos lados se construyen con el Dockerfile del
+   * candidato (contenido inmutable, tomado del headSha verificado) mientras
+   * las fuentes siguen saliendo del worktree de cada lado. El Bundle registra
+   * esa procedencia en la evidencia de BUILD_A0.
+   */
+  dockerfileFrom: z.enum(["commit", "head"]).optional(),
+  /**
    * Contexto de build relativo a la raíz del repo. Default: inferido — la
    * carpeta del Dockerfile, salvo que sus COPY/ADD referencien archivos que
    * solo existen en la raíz (patrón Turborepo: `docker build -f
@@ -166,6 +177,21 @@ export const WorkloadConfigSchema = z.object({
 export const FixturesConfigSchema = z
   .object({
     beforeAll: WorkloadConfigSchema.optional(),
+    /**
+     * Bootstrap SQL de identidad/datos de referencia (informe Bs As
+     * Neumáticos 2026-07: apps con rutas autenticadas y SIN signup público
+     * no tenían forma legítima de crear el primer usuario). Es un archivo
+     * .sql del repo que Proof aplica UNA vez por corrida, dentro del
+     * contenedor Postgres, después de `migrate deploy` del commit base y
+     * ANTES de arrancar cualquier app: forma parte de la preparación del
+     * entorno (como una migración), no del workload — la regla "las
+     * escrituras del workload son HTTP observables" queda intacta. Todas
+     * las celdas de la matriz lo heredan por clonación del seed S0, y su
+     * digest sha256 queda en la evidencia del Bundle. Patrón típico: crear
+     * el usuario semilla acá (hash bcrypt literal) y obtener el token vía
+     * fixtures.beforeAll con el login HTTP real.
+     */
+    bootstrapSql: RepoRelativePathSchema.optional(),
   })
   .strict();
 
@@ -187,6 +213,19 @@ export const CoverageConfigSchema = z.object({
     .optional(),
 }).strict();
 
+/**
+ * Override explícito de la clasificación de variables de entorno que
+ * `proof doctor` infiere del código (required = la app la asume presente;
+ * optional = módulo condicional, ej. ARCA o WhatsApp). El repo sabe más que
+ * cualquier heurística: lo declarado acá gana siempre sobre lo inferido.
+ */
+export const EnvClassificationSchema = z
+  .object({
+    required: z.array(EnvironmentNameSchema).max(256).optional(),
+    optional: z.array(EnvironmentNameSchema).max(256).optional(),
+  })
+  .strict();
+
 export const ApprovalConfigSchema = z.object({
   assertionId: z.string().trim().min(1).max(256),
   reason: z.string().trim().min(1).max(2_048),
@@ -207,6 +246,7 @@ export const ProjectConfigSchema = z
     workload: WorkloadConfigSchema.optional(),
     fixtures: FixturesConfigSchema.optional(),
     coverage: CoverageConfigSchema.optional(),
+    env: EnvClassificationSchema.optional(),
     approvals: z.array(ApprovalConfigSchema).max(100).default([]),
   })
   .strict()
@@ -245,5 +285,6 @@ export type ReleaseConfig = z.infer<typeof ReleaseConfigSchema>;
 export type WorkloadConfig = z.infer<typeof WorkloadConfigSchema>;
 export type FixturesConfig = z.infer<typeof FixturesConfigSchema>;
 export type CoverageConfig = z.infer<typeof CoverageConfigSchema>;
+export type EnvClassificationConfig = z.infer<typeof EnvClassificationSchema>;
 export type ApprovalConfig = z.infer<typeof ApprovalConfigSchema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;

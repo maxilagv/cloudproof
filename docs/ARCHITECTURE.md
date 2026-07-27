@@ -66,6 +66,18 @@ ejecutable del ledger obligatorio.
 | `ROLLBACK_A0_AFTER_A1_WRITES` | Arrancar y consultar A0 después de escrituras de A1 |
 | `SQL_EFFECTS` | Comparar efectos observables durante startup y workloads |
 
+La lista completa sigue siendo el contrato fail-closed para cambios de
+schema/SQL, riesgo alto o triage incompleto. Para un diff exclusivamente de
+aplicación con schema diff cero, el plan selecciona el ledger enfocado
+`BUILD_A0 + BUILD_A1 + A0_S0 + A1_S0 + SQL_EFFECTS`; las demás celdas se
+registran como no requeridas, no como evidencia omitida. La decisión y su
+ruleset forman parte de provenance/cache.
+
+Coverage tiene dos universos simultáneos: las rutas declaradas por el proyecto
+y cada método+ruta inferido de entrypoints HTTP modificados. Ambos deben quedar
+cubiertos para `VERIFIED`; esto evita que un workload completo respecto de una
+lista obsoleta certifique un feature cambiado que nunca recibió tráfico.
+
 ## Fronteras de confianza
 
 - Los inputs de release son dos snapshots Git exactos; los paths se confinan
@@ -95,11 +107,28 @@ ejecutable del ledger obligatorio.
 - `release plan` nunca puede producir `VERIFIED`; `INCONCLUSIVE` nunca se
   transforma en verde por policy.
 
+## Bootstrap de identidad (fixtures.bootstrapSql)
+
+Apps con rutas autenticadas y sin registro público no pueden crear su primer
+usuario por HTTP (informe Bs As Neumáticos 2026-07). `fixtures.bootstrapSql`
+declara un `.sql` del repo que el executor aplica UNA vez por corrida, dentro
+del contenedor Postgres, después de `migrate deploy` del commit base y antes
+de arrancar cualquier app. Es preparación de entorno — análoga a una
+migración — así que la invariante "las escrituras del workload son HTTP
+observables" queda intacta: el bootstrap ocurre antes de que exista tráfico
+observado, todas las celdas lo heredan por clonación del seed S0, y su digest
+sha256 queda en `provenance.artifacts` y en la assertion `postgres.bootstrap`.
+El patrón completo: sembrar el usuario (hash literal) en el SQL y obtener el
+token con el login HTTP real vía `fixtures.beforeAll`.
+
+Para el onboarding a Docker (el candidato agrega el Dockerfile que el commit
+base desplegado no tiene), `services.<n>.dockerfileFrom: "head"` construye
+ambos lados con la receta del candidato manteniendo las fuentes de cada
+commit; la procedencia queda en la evidencia de `BUILD_A0`.
+
 ## Capacidades todavía ausentes
 
 - Bundle v2, content-addressed evidence, freshness y atestación firmada;
-- fixture/bootstrap privilegiado y reproducible para apps sin setup HTTP;
-- flujo de evidencia local para árbol sucio con semántica distinta a release;
 - GitHub Check Run, dashboard y control plane;
 - servicios stateful adicionales y captura de tráfico de producción.
 

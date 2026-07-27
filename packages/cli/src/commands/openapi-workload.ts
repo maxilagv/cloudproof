@@ -58,7 +58,7 @@ export interface OpenApiWorkloadPlan {
   gaps: string[];
 }
 
-interface OpenApiDocument {
+export interface OpenApiDocument {
   openapi?: string;
   paths?: Record<string, unknown>;
   components?: { schemas?: Record<string, unknown> };
@@ -92,7 +92,7 @@ export function findOpenApiSpec(
 }
 
 /** Resuelve $ref locales (#/components/…) con guardia de ciclos. */
-function resolveRef(document: OpenApiDocument, node: unknown, seen: Set<string>): unknown {
+export function resolveRef(document: OpenApiDocument, node: unknown, seen: Set<string>): unknown {
   if (typeof node !== "object" || node === null) return node;
   const ref = (node as { $ref?: unknown }).$ref;
   if (typeof ref !== "string" || !ref.startsWith("#/")) return node;

@@ -1,6 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import type { Detector, DetectionResult } from "@proof/plugin-sdk";
+import {
+  generatedSegmentOf,
+  isWithinPath,
+  prismaGeneratorOutputs,
+  type Detector,
+  type DetectionResult,
+} from "@proof/plugin-sdk";
 
 /** ¿La carpeta contiene al menos un .prisma (hasta 2 niveles)? */
 function containsPrismaFiles(directory: string, depth = 2): boolean {
@@ -27,6 +33,10 @@ export const prismaDetector: Detector = {
       if (depth > 5) return;
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
         if (!entry.isDirectory() || ignored.has(entry.name)) continue;
+        // El cliente Prisma generado con `output` custom copia schema.prisma
+        // dentro del árbol fuente (caso Lubrisur: src/generated/prisma); un
+        // segmento de código generado nunca contiene el schema FUENTE.
+        if (generatedSegmentOf(entry.name) !== undefined) continue;
         const child = join(directory, entry.name);
         if (entry.name === "prisma") {
           const schemaPath = join(child, "schema.prisma");
@@ -49,7 +59,18 @@ export const prismaDetector: Detector = {
     };
     visit(projectRoot, 0);
 
-    return { detected: evidence.length > 0, kind: "prisma", evidence };
+    // Segunda pasada: los schemas FUENTE declaran adónde emite cada generator;
+    // cualquier evidencia dentro de esos outputs es una copia generada, no un
+    // schema del repo (aun cuando el output no use un nombre convencional).
+    const outputs = evidence
+      .filter((item) => item.endsWith("schema.prisma"))
+      .flatMap((item) => prismaGeneratorOutputs(projectRoot, join(projectRoot, item)));
+    const filtered =
+      outputs.length === 0
+        ? evidence
+        : evidence.filter((item) => !outputs.some((output) => isWithinPath(output, item)));
+
+    return { detected: filtered.length > 0, kind: "prisma", evidence: filtered };
   },
 };
 
