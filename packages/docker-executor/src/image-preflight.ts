@@ -2,8 +2,8 @@
  * Preflight ESTÁTICO de requisitos de runtime de la imagen (informe Lubrisur
  * 2026-07: "no detectó por sí solo que Prisma necesitaba OpenSSL dentro de
  * la imagen; el problema apareció recién al construir Docker"). La regla de
- * Proof es que un problema demostrable estáticamente debe aparecer en
- * `proof doctor`, no a los N minutos de un build.
+ * CloudProof es que un problema demostrable estáticamente debe aparecer en
+ * `cloudproof doctor`, no a los N minutos de un build.
  *
  * El análisis entiende multi-stage: solo cuentan la etapa FINAL y sus
  * ancestros por alias (`FROM builder`) — un `apk add openssl` en una etapa

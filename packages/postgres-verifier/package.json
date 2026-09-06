@@ -1,5 +1,5 @@
 {
-  "name": "@proof/postgres-verifier",
+  "name": "@cloudproof/postgres-verifier",
   "version": "0.0.1",
   "description": "Fast path y matriz de transición/rollback PostgreSQL-Prisma",
   "license": "SEE LICENSE IN LICENSE",
@@ -21,9 +21,9 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@proof/docker-executor": "workspace:*",
-    "@proof/http-recorder": "workspace:*",
-    "@proof/schema": "workspace:*"
+    "@cloudproof/docker-executor": "workspace:*",
+    "@cloudproof/http-recorder": "workspace:*",
+    "@cloudproof/schema": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

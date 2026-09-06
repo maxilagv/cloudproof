@@ -10,7 +10,7 @@ import {
   type ExecutionProfile,
   type RunningContainer,
   type SqlEffectSnapshot,
-} from "@proof/docker-executor";
+} from "@cloudproof/docker-executor";
 import {
   Recorder,
   Replayer,
@@ -18,7 +18,7 @@ import {
   redactTextForEvidence,
   type RecordedExchange,
   type ReplayResult,
-} from "@proof/http-recorder";
+} from "@cloudproof/http-recorder";
 import {
   deriveConclusion,
   type Approval,
@@ -26,9 +26,10 @@ import {
   type Conclusion,
   type Coverage,
   type ExecutionState,
-  type ProofBundle,
-} from "@proof/schema";
+  type CloudProofBundle,
+} from "@cloudproof/schema";
 import { RELEASE_MATRIX } from "./matrix.js";
+import { classifyMigrationApplyFailure } from "./migration-history.js";
 import { deriveNextActions } from "./next-actions.js";
 import { withRemediation } from "./remediation.js";
 import {
@@ -55,7 +56,7 @@ export interface FixtureSpec {
  * exchanges quedan grabados como prefijo replayable — cada celda de la
  * matriz recrea identidad/datos al hacer replay del prefijo — y puede
  * entregar variables al workload (p.ej. un token) escribiendo KEY=VALUE en
- * el archivo apuntado por PROOF_FIXTURE_ENV.
+ * el archivo apuntado por CLOUDPROOF_FIXTURE_ENV.
  */
 export interface FixturesSpec {
   beforeAll?: FixtureSpec;
@@ -97,7 +98,16 @@ export interface VerifyInput {
    * sha256 queda en el Bundle. Ver FixturesConfigSchema.bootstrapSql.
    */
   bootstrapSql?: string;
-  /** Universo obligatorio. Sin declaración, Proof nunca concluye VERIFIED. */
+  /**
+   * Ruta repo-relativa a un dump SQL de la base DESPLEGADA (schema + tabla
+   * `_prisma_migrations`) que reemplaza el replay completo de migraciones
+   * como génesis del seed S0 (informe Lubrisur 2026-07, 2ª ronda: historias
+   * de migraciones irreplayables desde cero). Se aplica ANTES de `migrate
+   * deploy`; Prisma aplica entonces solo las migraciones pendientes — la
+   * misma transición que ejecutará producción. Ver DataSourceSchema.schemaBaseline.
+   */
+  schemaBaseline?: string;
+  /** Universo obligatorio. Sin declaración, CloudProof nunca concluye VERIFIED. */
   requiredRoutes?: string[];
   /** GET/HEAD/OPTIONS capturados después de la última escritura. */
   rollbackProbeRoutes?: string[];
@@ -134,7 +144,7 @@ export function finalConclusion(
   const base = deriveConclusion(assertions, coverage);
   if (base !== "VERIFIED") return base;
   const executionComplete = assertions.some(
-    (assertion) => assertion.id === "proof.execution-complete" && assertion.result === "pass",
+    (assertion) => assertion.id === "cloudproof.execution-complete" && assertion.result === "pass",
   );
   if (!executionComplete) return "INCONCLUSIVE";
   return observedMethods.some((method) => WRITE_METHODS.has(method.toUpperCase()))
@@ -247,7 +257,7 @@ export function routeAssertions(
         mandatory: true,
         evidence,
         state,
-        reproduction: `proof reproduce ${id}`,
+        reproduction: `cloudproof reproduce ${id}`,
         reproductionContext: {
           kind: "live-state",
           state,
@@ -263,9 +273,9 @@ const FIXTURE_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const FIXTURE_ENVIRONMENT_LIMIT = 64;
 
 /**
- * Parser del archivo PROOF_FIXTURE_ENV: líneas KEY=VALUE, comentarios con #.
+ * Parser del archivo CLOUDPROOF_FIXTURE_ENV: líneas KEY=VALUE, comentarios con #.
  * Solo acepta nombres de entorno válidos y descarta reservados: el fixture
- * no puede redirigir el workload (PROOF_BASE_URL) ni inyectar flags al
+ * no puede redirigir el workload (CLOUDPROOF_BASE_URL) ni inyectar flags al
  * runtime del host (NODE_OPTIONS, PATH). Los valores con saltos de línea son
  * imposibles por construcción (una línea = una variable).
  */
@@ -281,7 +291,7 @@ export function parseFixtureEnvironment(contents: string): Record<string, string
     const value = trimmed.slice(separator + 1);
     if (!FIXTURE_ENVIRONMENT_NAME.test(name)) continue;
     const upper = name.toUpperCase();
-    if (upper === "PROOF_BASE_URL" || upper === "PROOF_FIXTURE_ENV") continue;
+    if (upper === "CLOUDPROOF_BASE_URL" || upper === "CLOUDPROOF_FIXTURE_ENV") continue;
     if (upper === "NODE_OPTIONS" || upper === "PATH") continue;
     if (value.includes("\u0000") || value.includes("\r")) continue;
     environment[name] = value;
@@ -542,8 +552,8 @@ function sqlEffectAssertion(
         ...describeEffects(baseline).map((line) => `baseline ${line}`),
         ...describeEffects(candidate).map((line) => `${options.candidateLabel} ${line}`),
       ].slice(0, 20),
-      reproduction: `proof reproduce ${options.id}`,
-      reproductionContext: { kind: "rerun-proof", state: options.state },
+      reproduction: `cloudproof reproduce ${options.id}`,
+      reproductionContext: { kind: "rerun-cloudproof", state: options.state },
     },
     approvals,
   );
@@ -631,8 +641,8 @@ function schemaStableAssertion(
       evidence: [
         `El schema cambió dentro de la celda (${before.fingerprint.digest} -> ${after.fingerprint.digest}); el estado declarado dejó de ser válido.`,
       ],
-      reproduction: `proof reproduce ${id}`,
-      reproductionContext: { kind: "rerun-proof", state },
+      reproduction: `cloudproof reproduce ${id}`,
+      reproductionContext: { kind: "rerun-cloudproof", state },
     },
     approvals,
   );
@@ -668,8 +678,8 @@ function stageFailure(
     mandatory: true,
     state,
     evidence: errorEvidence(error),
-    reproduction: `proof reproduce ${id}`,
-    reproductionContext: { kind: "rerun-proof", state },
+    reproduction: `cloudproof reproduce ${id}`,
+    reproductionContext: { kind: "rerun-cloudproof", state },
   };
   return inconclusive ? assertion : applyApproval(assertion, approvals);
 }
@@ -703,7 +713,7 @@ function staticReasonAssertionId(reason: TriageReason): string {
  * Reasons de riesgo "critical" (el techo de `TriageRisk`) se convierten en
  * assertions mandatorias bajo el namespace `postgres.*`, así que la policy
  * `no-destructive-migrations` ya existente las cubre sin cambios. Una
- * approval explícita en `proof.config.ts` (mismo mecanismo que cualquier
+ * approval explícita en `cloudproof.config.ts` (mismo mecanismo que cualquier
  * otra assertion) es la única forma de proceder pese al hallazgo — igual
  * que "APPROVED CHANGE" en el resto del bundle, nunca una excepción muda.
  */
@@ -734,7 +744,7 @@ function staticCriticalRiskAssertions(
                   `Ubicación: ${locator}${first?.excerpt === undefined ? "" : ` — ${first.excerpt}`}`,
                 ]),
             "Detectado por análisis estático de la migración antes de ejecutar cualquier workload " +
-              "(equivalente a `proof release plan`); ninguna ruta HTTP necesita ejercitar esta " +
+              "(equivalente a `cloudproof release plan`); ninguna ruta HTTP necesita ejercitar esta " +
               "superficie para que el hallazgo cuente.",
           ],
         },
@@ -773,7 +783,7 @@ export async function verifyRelease(
   input: VerifyInput,
   executor: DockerExecutor,
   workloadRunner?: CommandRunner,
-): Promise<ProofBundle> {
+): Promise<CloudProofBundle> {
   const effectiveWorkloadRunner =
     input.workload === undefined
       ? undefined
@@ -837,6 +847,42 @@ export async function verifyRelease(
     }
   }
 
+  // Schema baseline (informe Lubrisur 2026-07, 2ª ronda): también se resuelve,
+  // valida y digesta ANTES de gastar Docker. Un baseline sin el contenido de
+  // `_prisma_migrations` haría que migrate deploy re-aplique TODA la historia
+  // sobre el schema ya creado — el mismo fallo que el baseline vino a evitar,
+  // pero más confuso. Se rechaza acá, con la receta exacta para generarlo.
+  let schemaBaseline: { absolutePath: string; digest: string; bytes: number } | undefined;
+  let schemaBaselineError: string | undefined;
+  if (input.schemaBaseline !== undefined) {
+    const absolutePath = resolve(repoRoot, input.schemaBaseline);
+    const relativePath = relative(repoRoot, absolutePath);
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      schemaBaselineError = `data.schemaBaseline sale de la raíz del repositorio: ${input.schemaBaseline}`;
+    } else {
+      try {
+        const contents = readFileSync(absolutePath);
+        if (!contents.includes("_prisma_migrations")) {
+          schemaBaselineError =
+            `data.schemaBaseline no contiene la tabla _prisma_migrations: ${input.schemaBaseline}. ` +
+            `Sin ese registro, migrate deploy re-aplicaría la historia completa sobre el schema del dump. ` +
+            `Generalo desde la base desplegada con: ` +
+            `pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges ` +
+            `y agregá pg_dump "$DATABASE_URL" --data-only --table=_prisma_migrations --no-owner --no-privileges.`;
+        } else {
+          schemaBaseline = {
+            absolutePath,
+            digest: createHash("sha256").update(contents).digest("hex"),
+            bytes: contents.byteLength,
+          };
+          artifacts.push(`schema-baseline=sha256:${schemaBaseline.digest}`);
+        }
+      } catch {
+        schemaBaselineError = `data.schemaBaseline no existe o no puede leerse: ${input.schemaBaseline}`;
+      }
+    }
+  }
+
   const mark = (state: ExecutionState, obligation: string): void => {
     const values = completed.get(state) ?? new Set<string>();
     values.add(obligation);
@@ -853,7 +899,7 @@ export async function verifyRelease(
         .map((obligation) => `${entry.id}:${obligation}`),
     );
 
-  const bundle = (): ProofBundle => {
+  const bundle = (): CloudProofBundle => {
     const counts = new Map<string, number>();
     for (const assertion of assertions) counts.set(assertion.id, (counts.get(assertion.id) ?? 0) + 1);
     const duplicates = [...counts.entries()].filter(([, count]) => count > 1).map(([id]) => id);
@@ -863,7 +909,7 @@ export async function verifyRelease(
         : [
             ...assertions,
             {
-              id: "proof.assertion-ids-unique",
+              id: "cloudproof.assertion-ids-unique",
               result: "fail" as const,
               mandatory: true,
               state: "SQL_EFFECTS" as const,
@@ -928,6 +974,10 @@ export async function verifyRelease(
     ...(bootstrap === undefined || cloneFromContainerId !== undefined
       ? {}
       : { bootstrapSql: bootstrap.absolutePath }),
+    // Ídem schema baseline: génesis del seed, heredado por clonación.
+    ...(schemaBaseline === undefined || cloneFromContainerId !== undefined
+      ? {}
+      : { schemaBaselineSql: schemaBaseline.absolutePath }),
   });
   const appEnv = (databaseUrl: string): Record<string, string> => ({
     ...(input.serviceEnv ?? {}),
@@ -1023,6 +1073,19 @@ export async function verifyRelease(
       return bundle();
     }
 
+    if (schemaBaselineError !== undefined) {
+      assertions.push(
+        stageFailure(
+          "postgres.schema-baseline",
+          "A0_S0",
+          new Error(schemaBaselineError),
+          approvals,
+          true,
+        ),
+      );
+      return bundle();
+    }
+
     if (bootstrapError !== undefined) {
       assertions.push(
         stageFailure("postgres.bootstrap", "A0_S0", new Error(bootstrapError), approvals, true),
@@ -1101,6 +1164,22 @@ export async function verifyRelease(
         state: "A0_S0",
         evidence: ["S0 baseline fue clonado desde un seed inmutable."],
       });
+      if (schemaBaseline !== undefined) {
+        assertions.push({
+          id: "postgres.schema-baseline",
+          result: "pass",
+          mandatory: true,
+          state: "A0_S0",
+          evidence: [
+            `S0 nace del schema baseline declarado: ${input.schemaBaseline} ` +
+              `(sha256:${schemaBaseline.digest}, ${schemaBaseline.bytes} bytes), aplicado ANTES de ` +
+              `migrate deploy del commit base.`,
+            "migrate deploy aplicó solo las migraciones que _prisma_migrations no registraba — la " +
+              "misma transición que ejecutará producción. La historia completa de migraciones NO se " +
+              "reconstruyó desde cero en esta corrida.",
+          ],
+        });
+      }
       if (bootstrap !== undefined) {
         assertions.push({
           id: "postgres.bootstrap",
@@ -1115,7 +1194,42 @@ export async function verifyRelease(
         });
       }
     } catch (error) {
-      assertions.push(stageFailure("postgres.baseline-schema", "A0_S0", error, approvals, true));
+      // Informe Lubrisur 2026-07 (2ª ronda): si el fallo es `migrate deploy`
+      // del commit BASE sobre una base vacía, la historia de migraciones del
+      // repo es irreplayable — condición preexistente. La atribución es
+      // estructural: el candidato no participa en la construcción de S0.
+      const evidence = errorEvidence(error);
+      const history = classifyMigrationApplyFailure(evidence);
+      if (history !== undefined) {
+        assertions.push({
+          id: "postgres.migration-history",
+          result: "skipped",
+          mandatory: true,
+          state: "A0_S0",
+          evidence: [
+            `La historia de migraciones del commit base ${input.baseSha.slice(0, 12)} no se puede ` +
+              `reconstruir sobre una base vacía` +
+              (history.migrationName === undefined
+                ? "."
+                : `: la migración ${history.migrationName} no aplica.`),
+            ...(history.databaseError === undefined
+              ? []
+              : [
+                  history.databaseErrorCode === undefined
+                    ? history.databaseError
+                    : `${history.databaseError} (SQLSTATE ${history.databaseErrorCode})`,
+                ]),
+            "S0 se construye exclusivamente con las migraciones del commit BASE: el candidato no " +
+              "participa en esta etapa. Es una condición preexistente del repositorio, no un efecto " +
+              "de los cambios nuevos.",
+            ...evidence,
+          ].slice(0, 20),
+          reproduction: "cloudproof reproduce postgres.migration-history",
+          reproductionContext: { kind: "rerun-cloudproof", state: "A0_S0" },
+        });
+      } else {
+        assertions.push(stageFailure("postgres.baseline-schema", "A0_S0", error, approvals, true));
+      }
       return bundle();
     }
 
@@ -1175,7 +1289,7 @@ export async function verifyRelease(
       let fixturesBroken = false;
       if (input.fixtures?.beforeAll !== undefined) {
         const fixture = input.fixtures.beforeAll;
-        const fixtureDirectory = mkdtempSync(join(tmpdir(), "proof-fixtures-"));
+        const fixtureDirectory = mkdtempSync(join(tmpdir(), "cloudproof-fixtures-"));
         const fixtureEnvPath = join(fixtureDirectory, "fixture.env");
         try {
           const fixtureResult = await effectiveWorkloadRunner!.run(
@@ -1183,7 +1297,7 @@ export async function verifyRelease(
             fixture.args ?? [],
             {
               cwd: input.cwd ?? process.cwd(),
-              env: { PROOF_BASE_URL: proxyUrl, PROOF_FIXTURE_ENV: fixtureEnvPath },
+              env: { CLOUDPROOF_BASE_URL: proxyUrl, CLOUDPROOF_FIXTURE_ENV: fixtureEnvPath },
               timeoutMs: fixture.timeoutMs ?? 300_000,
             },
           );
@@ -1218,7 +1332,7 @@ export async function verifyRelease(
                 ...(handedOff.length === 0
                   ? []
                   : [
-                      `${handedOff.length} variable(s) entregadas al workload vía PROOF_FIXTURE_ENV: ${handedOff.slice(0, 10).join(", ")}.`,
+                      `${handedOff.length} variable(s) entregadas al workload vía CLOUDPROOF_FIXTURE_ENV: ${handedOff.slice(0, 10).join(", ")}.`,
                     ]),
                 ...(baselinePostStart !== undefined && fixtureEffects !== undefined
                   ? describeEffects(effectDelta(baselinePostStart, fixtureEffects)).map(
@@ -1242,9 +1356,9 @@ export async function verifyRelease(
           input.workload.args ?? [],
           {
             cwd: input.cwd ?? process.cwd(),
-            // El env del fixture nunca puede pisar PROOF_BASE_URL: el orden
+            // El env del fixture nunca puede pisar CLOUDPROOF_BASE_URL: el orden
             // del spread lo garantiza además del filtro del parser.
-            env: { ...fixtureEnvironment, PROOF_BASE_URL: proxyUrl },
+            env: { ...fixtureEnvironment, CLOUDPROOF_BASE_URL: proxyUrl },
             timeoutMs: input.workloadTimeoutMs ?? 600_000,
           },
         );
@@ -1269,8 +1383,8 @@ export async function verifyRelease(
             : [`${exchanges.length} exchange(s) capturados sin HTTP 5xx ni error SQL observable.`],
           ...(baselineBroken
             ? {
-                reproduction: "proof reproduce workload.baseline",
-                reproductionContext: { kind: "rerun-proof" as const, state: "A0_S0" as const },
+                reproduction: "cloudproof reproduce workload.baseline",
+                reproductionContext: { kind: "rerun-cloudproof" as const, state: "A0_S0" as const },
               }
             : {}),
         });
@@ -1471,7 +1585,7 @@ export async function verifyRelease(
       if (!effectUnavailable) mark("SQL_EFFECTS", "aggregate");
       const missing = missingObligations();
       assertions.push({
-        id: "proof.execution-complete",
+        id: "cloudproof.execution-complete",
         result: missing.length === 0 ? "pass" : "skipped",
         mandatory: true,
         state: "SQL_EFFECTS",
@@ -2210,7 +2324,7 @@ export async function verifyRelease(
 
     const missing = missingObligations();
     assertions.push({
-      id: "proof.execution-complete",
+      id: "cloudproof.execution-complete",
       result: missing.length === 0 ? "pass" : "skipped",
       mandatory: true,
       state: "SQL_EFFECTS",

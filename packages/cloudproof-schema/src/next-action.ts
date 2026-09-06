@@ -7,23 +7,31 @@ import { z } from "zod";
  *
  * Invariante: un bundle UNSAFE o INCONCLUSIVE contiene al menos una
  * nextAction; un bundle VERIFIED contiene cero. Un agente puede ejecutar
- * la lista y volver a correr `proof release verify` sin intervención humana
+ * la lista y volver a correr `cloudproof release verify` sin intervención humana
  * (excepto approvals, que son siempre decisión humana).
  */
 
 export const NextActionKindSchema = z.enum([
   /** El workload falla sobre A0+S0: nada es atribuible a la migración. */
   "fix-baseline",
-  /** Falta declarar coverage.requiredRoutes en proof.config.ts. */
+  /** Falta declarar coverage.requiredRoutes en cloudproof.config.ts. */
   "declare-coverage",
   /** Una ruta obligatoria no fue ejercitada por el workload. */
   "exercise-route",
-  /** Falta declarar (o corregir) el workload en proof.config.ts. */
+  /** Falta declarar (o corregir) el workload en cloudproof.config.ts. */
   "add-workload",
   /** El workload no ejecutó ninguna escritura HTTP observable. */
   "add-write-workload",
   /** Una etapa obligatoria no produjo evidencia; hay que re-ejecutarla. */
   "rerun-stage",
+  /**
+   * La historia de migraciones del commit BASE no se reconstruye desde cero
+   * (informe Lubrisur 2026-07, 2ª ronda): condición preexistente del repo,
+   * NO atribuible al candidato. La acción explica los caminos seguros
+   * (schemaBaseline desde la base desplegada, verificar el SHA base real,
+   * squash como release dedicado) y prohíbe editar migraciones aplicadas.
+   */
+  "repair-migration-history",
   /** Existe una receta determinista: aplicarla y re-verificar. */
   "apply-remediation",
   /** Fallo reproducible sin receta de catálogo: inspeccionar y corregir. */
@@ -38,9 +46,9 @@ export const NextActionSchema = z.object({
   assertionId: z.string().min(1).max(256).optional(),
   /** Objeto de la acción, ej. la ruta "POST /payments". */
   subject: z.string().min(1).max(2_048).optional(),
-  /** Campo de proof.config.ts a tocar, ej. "coverage.requiredRoutes". */
+  /** Campo de cloudproof.config.ts a tocar, ej. "coverage.requiredRoutes". */
   configPath: z.string().min(1).max(2_048).optional(),
-  /** Comando exacto asociado, ej. "proof reproduce <id>". */
+  /** Comando exacto asociado, ej. "cloudproof reproduce <id>". */
   command: z.string().min(1).max(16_384).optional(),
 });
 

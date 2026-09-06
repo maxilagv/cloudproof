@@ -68,7 +68,7 @@ describe("waitPostgresTcpReady", () => {
     expect(runner.count("pg_isready")).toBe(0);
     // La sonda usa el MISMO camino de conexión que tendrá la app: TCP + password.
     expect(runner.count("-h 127.0.0.1", "-p 5432", "SELECT 1, pg_postmaster_start_time();")).toBe(3);
-    expect(runner.count("-e PGPASSWORD=proof")).toBe(3);
+    expect(runner.count("-e PGPASSWORD=cloudproof")).toBe(3);
     expect(runner.count("ON_ERROR_STOP=1")).toBe(3);
     expect(attempts.map((attempt) => attempt.outcome)).toEqual(["waiting", "ok"]);
   });
@@ -161,7 +161,7 @@ describe("reintentos de lecturas SQL (dockerOkReadRetry)", () => {
   let tmp: string;
 
   beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), "proof-retry-ut-"));
+    tmp = mkdtempSync(join(tmpdir(), "cloudproof-retry-ut-"));
   });
 
   afterEach(() => {

@@ -1,6 +1,6 @@
-# @proof/policy-engine
+# @cloudproof/policy-engine
 
-Evaluación determinista de invariantes (tesis, sección 11 "Policy engine: evaluación determinista de invariantes"). Ninguna policy hace I/O ni llama a un LLM — solo lee el `ProofBundle` ya generado por `@proof/postgres-verifier`.
+Evaluación determinista de invariantes (tesis, sección 11 "Policy engine: evaluación determinista de invariantes"). Ninguna policy hace I/O ni llama a un LLM — solo lee el `CloudProofBundle` ya generado por `@cloudproof/postgres-verifier`.
 
 ## Policies incluidas
 

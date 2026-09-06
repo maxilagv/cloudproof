@@ -11,7 +11,7 @@ import {
 const MAX_CONFIG_BYTES = 1024 * 1024;
 
 export interface LoadConfigOptions {
-  /** Precede a PROOF_EXECUTION_PROFILE. */
+  /** Precede a CLOUDPROOF_EXECUTION_PROFILE. */
   executionProfile?: ExecutionProfile;
   /** Inyectable para integraciones; default process.env. */
   env?: NodeJS.ProcessEnv;
@@ -21,8 +21,8 @@ export class ConfigNotFoundError extends Error {
   constructor(searchedPaths: string | string[]) {
     const paths = Array.isArray(searchedPaths) ? searchedPaths : [searchedPaths];
     super(
-      `No se encontro una configuracion Proof en ${paths.join(" ni ")}. ` +
-        `Corre "proof init" para generarla.`,
+      `No se encontro una configuracion CloudProof en ${paths.join(" ni ")}. ` +
+        `Corre "cloudproof init" para generarla.`,
     );
     this.name = "ConfigNotFoundError";
   }
@@ -30,7 +30,7 @@ export class ConfigNotFoundError extends Error {
 
 export class InvalidConfigError extends Error {
   constructor(configPath: string, detail: string) {
-    super(`Config Proof invalido (${configPath}):\n${detail}`);
+    super(`Config CloudProof invalido (${configPath}):\n${detail}`);
     this.name = "InvalidConfigError";
   }
 }
@@ -38,8 +38,8 @@ export class InvalidConfigError extends Error {
 export class ExecutableConfigRejectedError extends Error {
   constructor(configPath: string, profile: ExecutionProfile) {
     super(
-      `El perfil ${profile} rechazo ${configPath}: un proof.config.ts ejecutaria codigo del checkout ` +
-        `antes de crear el sandbox. Usa proof.config.json (datos puros) o proporciona una ` +
+      `El perfil ${profile} rechazo ${configPath}: un cloudproof.config.ts ejecutaria codigo del checkout ` +
+        `antes de crear el sandbox. Usa cloudproof.config.json (datos puros) o proporciona una ` +
         `configuracion confiable fuera del checkout candidato.`,
     );
     this.name = "ExecutableConfigRejectedError";
@@ -49,7 +49,7 @@ export class ExecutableConfigRejectedError extends Error {
 export class InvalidExecutionProfileError extends Error {
   constructor(value: string) {
     super(
-      `PROOF_EXECUTION_PROFILE invalido: "${value}". Valores permitidos: trusted, internal, fork.`,
+      `CLOUDPROOF_EXECUTION_PROFILE invalido: "${value}". Valores permitidos: trusted, internal, fork.`,
     );
     this.name = "InvalidExecutionProfileError";
   }
@@ -59,7 +59,7 @@ export class ExecutionProfileDowngradeError extends Error {
   constructor(requested: ExecutionProfile, locked: ExecutionProfile) {
     super(
       `Se rechazo el downgrade de perfil ${locked} -> ${requested}. ` +
-        `PROOF_EXECUTION_PROFILE_LOCKED solo permite conservar o endurecer el aislamiento.`,
+        `CLOUDPROOF_EXECUTION_PROFILE_LOCKED solo permite conservar o endurecer el aislamiento.`,
     );
     this.name = "ExecutionProfileDowngradeError";
   }
@@ -85,17 +85,17 @@ export function resolveExecutionProfile(
   override?: ExecutionProfile,
   env: NodeJS.ProcessEnv = process.env,
 ): ExecutionProfile {
-  const raw = env["PROOF_EXECUTION_PROFILE"];
-  const lockedRaw = env["PROOF_EXECUTION_PROFILE_LOCKED"];
+  const raw = env["CLOUDPROOF_EXECUTION_PROFILE"];
+  const lockedRaw = env["CLOUDPROOF_EXECUTION_PROFILE_LOCKED"];
   const hasSelection = override !== undefined || (raw !== undefined && raw.trim() !== "");
   const requested =
     override ??
     (raw === undefined || raw.trim() === ""
       ? "trusted"
-      : parseProfile(raw, "PROOF_EXECUTION_PROFILE"));
+      : parseProfile(raw, "CLOUDPROOF_EXECUTION_PROFILE"));
   if (lockedRaw === undefined || lockedRaw.trim() === "") return requested;
 
-  const locked = parseProfile(lockedRaw, "PROOF_EXECUTION_PROFILE_LOCKED");
+  const locked = parseProfile(lockedRaw, "CLOUDPROOF_EXECUTION_PROFILE_LOCKED");
   if (hasSelection && PROFILE_RANK[requested] < PROFILE_RANK[locked]) {
     throw new ExecutionProfileDowngradeError(requested, locked);
   }
@@ -222,7 +222,7 @@ function assertUntrustedJsonConfig(cwd: string, configPath: string): void {
   if (!entry.isFile() || entry.isSymbolicLink()) {
     throw new InvalidConfigError(
       configPath,
-      "proof.config.json debe ser un archivo regular, no un symlink ni directorio.",
+      "cloudproof.config.json debe ser un archivo regular, no un symlink ni directorio.",
     );
   }
   const realRoot = realpathSync(cwd);
@@ -231,13 +231,13 @@ function assertUntrustedJsonConfig(cwd: string, configPath: string): void {
   if (rel.startsWith("..") || isAbsolute(rel)) {
     throw new InvalidConfigError(
       configPath,
-      "proof.config.json resuelve fuera del checkout y fue rechazado.",
+      "cloudproof.config.json resuelve fuera del checkout y fue rechazado.",
     );
   }
 }
 
 /**
- * Solo trusted conserva proof.config.ts via jiti. internal/fork aceptan JSON:
+ * Solo trusted conserva cloudproof.config.ts via jiti. internal/fork aceptan JSON:
  * la politica se decide antes de importar cualquier byte ejecutable del PR.
  */
 export async function loadConfig(
@@ -245,8 +245,8 @@ export async function loadConfig(
   options: LoadConfigOptions = {},
 ): Promise<ProjectConfig> {
   const profile = resolveExecutionProfile(options.executionProfile, options.env ?? process.env);
-  const typescriptPath = resolve(cwd, "proof.config.ts");
-  const jsonPath = resolve(cwd, "proof.config.json");
+  const typescriptPath = resolve(cwd, "cloudproof.config.ts");
+  const jsonPath = resolve(cwd, "cloudproof.config.json");
 
   if (profile !== "trusted") {
     if (existsSync(jsonPath)) {

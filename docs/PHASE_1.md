@@ -61,7 +61,7 @@ Una corrida solo puede emitir `VERIFIED` cuando:
 - todo fallo restante tiene una approval exacta, explícita y vigente.
 
 Un fallo de build, migración, startup, HTTP o efectos SQL queda dentro del
-Proof Bundle. Los fallos HTTP conservan el exchange mínimo para reproducción;
+CloudProof Bundle. Los fallos HTTP conservan el exchange mínimo para reproducción;
 los fallos de etapa conservan un contexto de rerun. Ninguna de estas etapas
 se convierte en una excepción sin evidencia.
 
@@ -73,7 +73,7 @@ del gate 1.E con agentes de IA como consumidores):
 - todo veredicto UNSAFE/INCONCLUSIVE lleva `nextActions` — acciones tipadas
   (declarar coverage, agregar workload de escritura, ejercitar ruta,
   re-ejecutar etapa, aplicar receta);
-- `proof init` genera `AGENTS.md` (bloque gestionado) para que cualquier
+- `cloudproof init` genera `AGENTS.md` (bloque gestionado) para que cualquier
   agente que entre al repo sepa que la verificación existe y cómo usarla.
 
 ## Aislamiento
@@ -100,12 +100,12 @@ pnpm test
 Con Docker:
 
 ```sh
-PROOF_DOCKER_IT=1 PROOF_DOCKER_IT_FULL=1 \
-  pnpm --filter @proof/docker-executor exec vitest run tests/integration.test.ts --no-file-parallelism
-PROOF_DOCKER_IT=1 PROOF_DOCKER_IT_FULL=1 \
-  pnpm --filter @proof/cli exec vitest run tests/e2e.test.ts --no-file-parallelism
-PROOF_DOCKER_IT=1 PROOF_DOCKER_IT_FULL=1 \
-  pnpm --filter @proof/cli exec vitest run tests/reproduce.integration.test.ts --no-file-parallelism
+CLOUDPROOF_DOCKER_IT=1 CLOUDPROOF_DOCKER_IT_FULL=1 \
+  pnpm --filter @cloudproof/docker-executor exec vitest run tests/integration.test.ts --no-file-parallelism
+CLOUDPROOF_DOCKER_IT=1 CLOUDPROOF_DOCKER_IT_FULL=1 \
+  pnpm --filter @cloudproof/cli exec vitest run tests/e2e.test.ts --no-file-parallelism
+CLOUDPROOF_DOCKER_IT=1 CLOUDPROOF_DOCKER_IT_FULL=1 \
+  pnpm --filter @cloudproof/cli exec vitest run tests/reproduce.integration.test.ts --no-file-parallelism
 ```
 
 Estas suites se ejecutan secuencialmente en CI porque verifican limpieza por
@@ -127,7 +127,7 @@ completa sobre los mismos 5 repos externos:
 
 | # | Repo | Veredicto | Detalle |
 |---|---|---|---|
-| 1 | workout-cool | **VERIFIED** (y **UNSAFE** en la demo) | Pipeline completo con workload real (signup = INSERT). Proof detectó un **bug real del repo**: `user.onboardingPreferences` en schema.prisma sin migración (deploy fresco roto, P2022); con la migración faltante agregada al fork → VERIFIED. Demo canónica: branch con `ADD COLUMN tenant_id NOT NULL` → UNSAFE + receta expand/contract + `apply-remediation`, la salida exacta de la tesis 19.5 sobre código externo |
+| 1 | workout-cool | **VERIFIED** (y **UNSAFE** en la demo) | Pipeline completo con workload real (signup = INSERT). CloudProof detectó un **bug real del repo**: `user.onboardingPreferences` en schema.prisma sin migración (deploy fresco roto, P2022); con la migración faltante agregada al fork → VERIFIED. Demo canónica: branch con `ADD COLUMN tenant_id NOT NULL` → UNSAFE + receta expand/contract + `apply-remediation`, la salida exacta de la tesis 19.5 sobre código externo |
 | 2 | nestjs-prisma-postgres-starter | INCONCLUSIVE honesto | Build reparado (1 commit al fork: su Dockerfile no copiaba prisma.config.ts), schema multi-archivo + migrador config-era funcionan; la app exige Redis en runtime (502) — fuera del alcance F1, ya en la etapa 2 de la tesis (18.3) |
 | 3 | rallly | INCONCLUSIVE honesto | Cero asistencia: init detectó servicio + prismaSchema + `SELF_HOSTED=true` desde su compose; build Turborepo desde raíz, migrador Prisma 7 config-era, arranque OK. Solo falta suite HTTP propia |
 | 4 | peppermint | INCONCLUSIVE honesto | Dockerfile standalone del repo estaba abandonado (sin corepack, no compilaba la app, entrypoint roto) — reparado en el fork (3 commits); migrador respeta Prisma 5.6 del servicio; puerto 5003 hardcodeado vs EXPOSE 8090 stale (defecto del repo) calibrado con `port` |
@@ -143,12 +143,12 @@ completa sobre los mismos 5 repos externos:
 3. **`buildArgs`** por servicio + adopción automática desde el
    docker-compose del repo (rallly exige `SELF_HOSTED=true`).
 4. **`env` de runtime** por servicio (equivalente al env_file del compose;
-   DATABASE_URL/PORT siguen siendo de Proof).
+   DATABASE_URL/PORT siguen siendo de CloudProof).
 5. **`readinessTimeoutMs`** por servicio para bootstraps pesados.
 6. **Prisma multi-archivo** (`prisma/schema/`) en detectores, doctor y
    migrador.
 7. **Migrador "config-era"** (Prisma 7 / prisma.config.ts): config
-   sintético de Proof montado junto al node_modules del migrador, drivado
+   sintético de CloudProof montado junto al node_modules del migrador, drivado
    por env vars — el config del repo nunca se ejecuta.
 8. **Versión de Prisma por servicio/paquete del schema**, no solo raíz
    (peppermint: 5.6 en apps/api).
@@ -159,12 +159,12 @@ completa sobre los mismos 5 repos externos:
 11. **Alias Prisma P2xxx → SQLSTATE** en el catálogo de remediación (la
     demo real llegó como P2011, no 23502).
 12. **Cache de imagen por contenido** (Dockerfile + rutas + buildArgs en el
-    tag) y `PROOF_FORCE_REBUILD=1`.
+    tag) y `CLOUDPROOF_FORCE_REBUILD=1`.
 
 ### Fricciones que quedan (honestas, con dueño claro)
 
 - Repos sin suite HTTP propia quedan INCONCLUSIVE por diseño; el camino a
-  VERIFIED es un workload PROOF_BASE_URL (documentado en AGENTS.md).
+  VERIFIED es un workload CLOUDPROOF_BASE_URL (documentado en AGENTS.md).
 - Apps que exigen servicios extra en runtime (Redis) esperan la etapa 2 de
   la tesis (18.3).
 - El timeout de build de 10 min del ejecutor quedó corto para monorepos
@@ -186,10 +186,10 @@ sin fixtures propios.
 
 ### Resultado por repo
 
-| # | Repo | `proof init` | `proof doctor` | Docker real | Veredicto de la corrida |
+| # | Repo | `cloudproof init` | `cloudproof doctor` | Docker real | Veredicto de la corrida |
 |---|---|---|---|---|---|
 | 1 | Snouzy/workout-cool | Correcto, cero asistencia | Limpio | Build A0 + Postgres + migración + arranque de la app: **todo OK** | `INCONCLUSIVE` — el repo no tiene test suite propio (esperado, tesis 19.1: sin workload no hay VERIFIED) |
-| 2 | Peppermint-Lab/peppermint | **Path de servicio incorrecto** (`apps/api/src` en vez de `apps/api`) | Corregido con 1 edición manual de config | Build falla | Bloqueado por un bug real en el Dockerfile del propio repo (`COPY turbo.json /../../turbo.json`, ruta inválida) — no relacionado con Proof |
+| 2 | Peppermint-Lab/peppermint | **Path de servicio incorrecto** (`apps/api/src` en vez de `apps/api`) | Corregido con 1 edición manual de config | Build falla | Bloqueado por un bug real en el Dockerfile del propio repo (`COPY turbo.json /../../turbo.json`, ruta inválida) — no relacionado con CloudProof |
 | 3 | lukevella/rallly | **Servicio incorrecto** (detectó `packages/database`, una librería sin Dockerfile, en vez de `apps/web`) | Corregido con 1 edición manual de config | Build falla | Bloqueado por un **gap real del motor** (ver abajo) |
 | 4 | elie222/inbox-zero | Servicio correcto (`apps/web`) | **Sin Dockerfile detectable** | No intentado | Bloqueado por un **gap real del motor** (ver abajo) |
 | 5 | the-pujon/nestjs-prisma-postgres-starter | Workload auto-detectado (`test:e2e`) ✓; **Prisma no detectado** (schema multi-archivo) | HIGH: falta schema Prisma | Build falla | Bloqueado por un **gap real del motor** + un bug de ordering en el Dockerfile del propio repo |
@@ -211,7 +211,7 @@ se cierra con esta corrida**.
    el fix de mayor apalancamiento: es una convención común y documentada, no
    una rareza de un solo repo.
 2. **Sin soporte para Dockerfile con nombre/ruta custom.** `inbox-zero` usa
-   `docker/Dockerfile.local` / `.prod` / `.web` — Proof solo reconoce un
+   `docker/Dockerfile.local` / `.prod` / `.web` — CloudProof solo reconoce un
    archivo llamado literalmente `Dockerfile` en `servicePath` o en la raíz.
    No hay campo en `ServiceSchema` para declarar una ruta explícita.
 3. **Sin soporte para el schema multi-archivo de Prisma** (`prisma/schema/`
@@ -219,7 +219,7 @@ se cierra con esta corrida**.
    (`prismaDetector`/`postgresDetector`) como, presumiblemente, la invocación
    de migración en `docker-executor` (no llegamos a probarlo en vivo porque
    el build del repo falló antes por una causa separada).
-4. **Heurística de `proof init` para el path de servicio es demasiado
+4. **Heurística de `cloudproof init` para el path de servicio es demasiado
    ingenua**: asume que "donde vive `prisma/`" es el servicio HTTP real. Se
    equivoca de dos formas distintas en esta corrida — Prisma anidado bajo
    `src/` dentro del servicio correcto (peppermint) y Prisma en un paquete
@@ -233,17 +233,17 @@ se cierra con esta corrida**.
    para el mismo SHA (antes/después de corregir la config), y el `docker
    image inspect` que gatea el rebuild devolvió un hit stale. Vale la pena
    una clave de cache más robusta (hash de contenido del worktree) o al
-   menos documentar cómo purgar `proof-app:<sha>-<hash>` manualmente.
+   menos documentar cómo purgar `cloudproof-app:<sha>-<hash>` manualmente.
 
-### Defectos reales en los repos externos (no de Proof)
+### Defectos reales en los repos externos (no de CloudProof)
 
 - `peppermint/apps/api/Dockerfile`: `COPY turbo.json /../../turbo.json` es
   una ruta inválida — rompe para cualquiera que construya ese Dockerfile,
-  no solo para Proof.
+  no solo para CloudProof.
 - `nestjs-prisma-postgres-starter/Dockerfile`: `RUN npm ci` dispara
   `postinstall: prisma generate` antes de que `COPY . .` traiga
   `prisma.config.ts` (necesario para el schema multi-archivo) — build roto
-  desde un checkout limpio, independiente de Proof.
+  desde un checkout limpio, independiente de CloudProof.
 
 ### Próximos pasos para cerrar 1.E
 
@@ -251,4 +251,4 @@ No alcanza con reintentar los mismos 5 repos: los gaps 1–4 de arriba son
 fixes de producto reales. El camino más corto al gate es implementar el fix
 de mayor apalancamiento (build context declarable) y volver a correr sobre
 `rallly` — el único de los 3 bloqueados cuyo bloqueo es *puramente* un gap
-de Proof, sin defectos propios del repo de por medio.
+de CloudProof, sin defectos propios del repo de por medio.

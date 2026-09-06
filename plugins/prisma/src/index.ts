@@ -6,7 +6,7 @@ import {
   prismaGeneratorOutputs,
   type Detector,
   type DetectionResult,
-} from "@proof/plugin-sdk";
+} from "@cloudproof/plugin-sdk";
 
 /** ¿La carpeta contiene al menos un .prisma (hasta 2 niveles)? */
 function containsPrismaFiles(directory: string, depth = 2): boolean {

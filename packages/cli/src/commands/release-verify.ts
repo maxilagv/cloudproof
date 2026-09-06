@@ -7,11 +7,11 @@ import {
   type ExecutionProfile,
   type ProjectConfig,
   type ServiceConfig,
-} from "@proof/config";
-import { verifyRelease } from "@proof/postgres-verifier";
-import { ComposeExecutor } from "@proof/docker-executor";
-import { evaluatePolicies, getPolicy, type PolicyViolation } from "@proof/policy-engine";
-import { COMPLETE_RELEASE_MATRIX_STATES, type ProofBundle } from "@proof/schema";
+} from "@cloudproof/config";
+import { verifyRelease } from "@cloudproof/postgres-verifier";
+import { ComposeExecutor } from "@cloudproof/docker-executor";
+import { evaluatePolicies, getPolicy, type PolicyViolation } from "@cloudproof/policy-engine";
+import { COMPLETE_RELEASE_MATRIX_STATES, type CloudProofBundle } from "@cloudproof/schema";
 import { conclusionBadge, paint, startSpinner } from "../ui.js";
 import { createWorktreeSnapshot } from "../worktree-snapshot.js";
 
@@ -51,16 +51,16 @@ function selectService(
   if (entries.length !== 1) {
     throw new Error(
       entries.length === 0
-        ? "proof.config.ts no declara servicios."
-        : "proof.config.ts declara más de un servicio; elegí uno con --service <nombre>.",
+        ? "cloudproof.config.ts no declara servicios."
+        : "cloudproof.config.ts declara más de un servicio; elegí uno con --service <nombre>.",
     );
   }
   const selected = entries[0];
-  if (selected === undefined) throw new Error("proof.config.ts no declara servicios.");
+  if (selected === undefined) throw new Error("cloudproof.config.ts no declara servicios.");
   return { name: selected[0], config: selected[1] };
 }
 
-export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<ProofBundle> {
+export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<CloudProofBundle> {
   const cwd = options.cwd ?? process.cwd();
   const requestedProfile =
     options.profile === undefined ? undefined : ExecutionProfileSchema.parse(options.profile);
@@ -85,7 +85,7 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
   const postgres = Object.values(config.data).find((source) => source.kind === "postgres");
   if (postgres === undefined) {
     throw new Error(
-      "proof.config.ts no declara una fuente data.* con kind \"postgres\"; " +
+      "cloudproof.config.ts no declara una fuente data.* con kind \"postgres\"; " +
         "release verify de Fase 1 no eligió una base por defecto.",
     );
   }
@@ -109,7 +109,7 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
           `release verify ${paint.dim(`${options.baseSha.slice(0, 12)} → ${headSha.slice(0, 12)}`)} — construyendo imágenes y ejecutando la matriz…`,
         );
 
-  let bundle: ProofBundle;
+  let bundle: CloudProofBundle;
   try {
     bundle = await verifyRelease(
       {
@@ -156,6 +156,9 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
         ...(config.fixtures?.bootstrapSql === undefined
           ? {}
           : { bootstrapSql: config.fixtures.bootstrapSql }),
+        ...(postgres.schemaBaseline === undefined
+          ? {}
+          : { schemaBaseline: postgres.schemaBaseline }),
         ...(config.coverage === undefined
           ? {}
           : { requiredRoutes: config.coverage.requiredRoutes }),
@@ -182,9 +185,9 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
 
   const violations = evaluatePolicies(config.policies, bundle);
 
-  const proofDir = join(cwd, ".proof");
-  mkdirSync(proofDir, { recursive: true });
-  const bundlePath = join(proofDir, `release-verify-${bundle.provenance.runner}.json`);
+  const cloudproofDir = join(cwd, ".cloudproof");
+  mkdirSync(cloudproofDir, { recursive: true });
+  const bundlePath = join(cloudproofDir, `release-verify-${bundle.provenance.runner}.json`);
   writeFileSync(bundlePath, JSON.stringify(bundle, null, 2), "utf-8");
 
   const writeOutput = options.writeOutput ?? ((text: string) => process.stdout.write(text));
@@ -201,12 +204,12 @@ export async function runReleaseVerify(options: ReleaseVerifyOptions): Promise<P
  * Render puro (testeable sin Docker) del reporte humano, calcado de la
  * demo canónica de la tesis (19.5). El bloque "Recommended:" es la vista
  * humana del campo `remediation` del bundle — la receta la produce el
- * catálogo determinista de @proof/postgres-verifier a partir de SQLSTATE
+ * catálogo determinista de @cloudproof/postgres-verifier a partir de SQLSTATE
  * observados, nunca una conclusión generativa (D-015). El bloque "Next:"
  * es la vista humana de `nextActions` (INCONCLUSIVE accionable).
  */
 export function renderHumanReport(
-  bundle: ProofBundle,
+  bundle: CloudProofBundle,
   violations: PolicyViolation[],
   bundlePath: string,
 ): string {
@@ -231,7 +234,7 @@ export function renderHumanReport(
     }`,
   );
   lines.push("");
-  lines.push(`${paint.bold("RELEASE PROOF:")} ${conclusionBadge(bundle.conclusion)}`);
+  lines.push(`${paint.bold("RELEASE CLOUDPROOF:")} ${conclusionBadge(bundle.conclusion)}`);
   const candidateSource = bundle.provenance.artifacts.find((artifact) =>
     artifact.startsWith("candidate-source="),
   );
@@ -273,11 +276,19 @@ export function renderHumanReport(
         assertion.mandatory !== false &&
         assertion.evidence.some((line) => /fingerprint|pg_catalog/i.test(line)),
     );
+    const migrationHistory = bundle.assertions.find(
+      (assertion) => assertion.id === "postgres.migration-history" && assertion.result !== "pass",
+    );
     if (baseline?.result === "fail") {
       lines.push(
         "Baseline tests failed on the current version; nothing can be attributed to the migration.",
       );
       for (const line of baseline.evidence) lines.push(line);
+    } else if (migrationHistory !== undefined) {
+      lines.push(
+        "Base migration history is not replayable from scratch (pre-existing repository condition — NOT caused by the candidate):",
+      );
+      for (const line of migrationHistory.evidence.slice(0, 3)) lines.push(line);
     } else if (fingerprintUnavailable !== undefined) {
       lines.push(
         `Schema fingerprint failed at ${fingerprintUnavailable.id}:`,
@@ -285,7 +296,7 @@ export function renderHumanReport(
       );
     } else if (bundle.coverage.source === "unknown") {
       lines.push(
-        "Coverage universe is unknown. Declare `coverage.requiredRoutes` in proof.config.ts.",
+        "Coverage universe is unknown. Declare `coverage.requiredRoutes` in cloudproof.config.ts.",
       );
     } else if ((bundle.coverage.changedRoutesMissing?.length ?? 0) > 0) {
       lines.push(
@@ -295,7 +306,7 @@ export function renderHumanReport(
         lines.push(`Changed route without traffic: ${route}`);
       }
       lines.push(
-        "Release mechanics may be safe, but Proof cannot claim that the modified feature works.",
+        "Release mechanics may be safe, but CloudProof cannot claim that the modified feature works.",
       );
     } else if (bundle.coverage.changeSource === "unknown") {
       lines.push("Change coverage is unknown because the release diff could not be analyzed completely.");
@@ -309,7 +320,7 @@ export function renderHumanReport(
         approved.length > 0 &&
         !bundle.assertions.some(
           (assertion) =>
-            assertion.id === "proof.execution-complete" && assertion.result === "pass",
+            assertion.id === "cloudproof.execution-complete" && assertion.result === "pass",
         );
       if (skipped.length > 0) {
         lines.push("Mandatory evidence is unavailable:");
@@ -317,10 +328,10 @@ export function renderHumanReport(
           lines.push(`${assertion.id}: ${assertion.evidence.join(" ")}`);
         }
       } else if (approvedIncomplete) {
-        lines.push("An approved stage failure prevented the remaining proof states from running.");
+        lines.push("An approved stage failure prevented the remaining cloudproof states from running.");
       } else {
         lines.push(
-          "No write workload observed. Declare `workload` in proof.config.ts so proof can exercise the transition.",
+          "No write workload observed. Declare `workload` in cloudproof.config.ts so cloudproof can exercise the transition.",
         );
       }
     }
@@ -377,7 +388,7 @@ export function renderHumanReport(
  * arriba como APPROVED CHANGE.
  */
 export function renderMatrixCells(
-  assertions: ProofBundle["assertions"],
+  assertions: CloudProofBundle["assertions"],
   matrixProfile?: string,
 ): string[] {
   if (!assertions.some((assertion) => assertion.state !== undefined)) return [];

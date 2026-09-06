@@ -1,5 +1,5 @@
 {
-  "name": "@proof/docker-executor",
+  "name": "@cloudproof/docker-executor",
   "version": "0.0.1",
   "description": "Orquestación de contenedores efímeros (Docker Compose) para builds base/candidate y Postgres desechable",
   "license": "SEE LICENSE IN LICENSE",
@@ -21,7 +21,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@proof/schema": "workspace:*",
+    "@cloudproof/schema": "workspace:*",
     "cross-spawn": "^7.0.6"
   },
   "devDependencies": {

@@ -9,7 +9,7 @@ import {
   type DockerExecutor,
   type EphemeralPostgresSpec,
   type RunningContainer,
-} from "@proof/docker-executor";
+} from "@cloudproof/docker-executor";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   parseFixtureEnvironment,
@@ -95,7 +95,7 @@ function harness(
         if (request.method === "POST" && request.url === "/register") {
           effects.set(databaseId, (effects.get(databaseId) ?? 0) + 1);
           response.statusCode = 201;
-          response.end(JSON.stringify({ user: "proof" }));
+          response.end(JSON.stringify({ user: "cloudproof" }));
           return;
         }
         if (request.method === "POST" && request.url === "/orders") {
@@ -165,16 +165,16 @@ function harness(
 
   const workload: CommandRunner = {
     async run(command, _args, runOptions) {
-      const baseUrl = runOptions?.env?.["PROOF_BASE_URL"];
-      if (baseUrl === undefined) throw new Error("missing PROOF_BASE_URL");
+      const baseUrl = runOptions?.env?.["CLOUDPROOF_BASE_URL"];
+      if (baseUrl === undefined) throw new Error("missing CLOUDPROOF_BASE_URL");
       if (command === "test-fixtures") {
         events.push("fixtures");
         const register = await fetch(`${baseUrl}/register`, { method: "POST" });
-        const envPath = runOptions?.env?.["PROOF_FIXTURE_ENV"];
-        if (envPath === undefined) throw new Error("missing PROOF_FIXTURE_ENV");
+        const envPath = runOptions?.env?.["CLOUDPROOF_FIXTURE_ENV"];
+        if (envPath === undefined) throw new Error("missing CLOUDPROOF_FIXTURE_ENV");
         writeFileSync(
           envPath,
-          "# token emitido por el fixture\nAUTH_TOKEN=tok123\nPROOF_BASE_URL=http://evil\nBAD NAME=x\n",
+          "# token emitido por el fixture\nAUTH_TOKEN=tok123\nCLOUDPROOF_BASE_URL=http://evil\nBAD NAME=x\n",
           "utf-8",
         );
         return { exitCode: register.status === 201 ? 0 : 1, stdout: "", stderr: "" };
@@ -249,7 +249,7 @@ describe("verifyRelease state machine", () => {
     expect(bundle.assertions.find((item) => item.id === "postgres.sql-effects.matrix")?.result).toBe(
       "pass",
     );
-    expect(bundle.assertions.find((item) => item.id === "proof.execution-complete")?.result).toBe(
+    expect(bundle.assertions.find((item) => item.id === "cloudproof.execution-complete")?.result).toBe(
       "pass",
     );
   });
@@ -277,7 +277,7 @@ describe("verifyRelease state machine", () => {
       {
         result: "fail",
         state: "MIGRATE_S0_TO_S1",
-        reproductionContext: { kind: "rerun-proof" },
+        reproductionContext: { kind: "rerun-cloudproof" },
       },
     );
   });
@@ -294,7 +294,7 @@ describe("verifyRelease state machine", () => {
     expect(
       bundle.assertions.find((item) => item.id === "postgres.migration-candidate")?.approval,
     ).toBeDefined();
-    expect(bundle.assertions.some((item) => item.id === "proof.execution-complete")).toBe(false);
+    expect(bundle.assertions.some((item) => item.id === "cloudproof.execution-complete")).toBe(false);
   });
 
   it("serviceEnv llega al contenedor pero no puede pisar DATABASE_URL", async () => {
@@ -315,7 +315,7 @@ describe("verifyRelease state machine", () => {
         runner: "unit",
         workload: { command: "test-workload" },
         requiredRoutes: ["POST /orders"],
-        serviceEnv: { BETTER_AUTH_SECRET: "proof-secret", DATABASE_URL: "postgres://mal" },
+        serviceEnv: { BETTER_AUTH_SECRET: "cloudproof-secret", DATABASE_URL: "postgres://mal" },
         approvals: [],
       },
       scenario.executor,
@@ -324,7 +324,7 @@ describe("verifyRelease state machine", () => {
 
     expect(captured.length).toBeGreaterThan(0);
     for (const env of captured) {
-      expect(env["BETTER_AUTH_SECRET"]).toBe("proof-secret");
+      expect(env["BETTER_AUTH_SECRET"]).toBe("cloudproof-secret");
       expect(env["DATABASE_URL"]).toMatch(/^db:\/\//); // el de la corrida, no el declarado
     }
   });
@@ -365,10 +365,10 @@ function git(cwd: string, args: string[]): string {
  * necesitó que el triage estático resolviera nada.
  */
 function createDestructiveMigrationRepo(): { repoRoot: string; baseSha: string; headSha: string } {
-  const repoRoot = mkdtempSync(join(tmpdir(), "proof-triage-"));
+  const repoRoot = mkdtempSync(join(tmpdir(), "cloudproof-triage-"));
   git(repoRoot, ["init", "-q"]);
-  git(repoRoot, ["config", "user.email", "proof-tests@example.com"]);
-  git(repoRoot, ["config", "user.name", "Proof Tests"]);
+  git(repoRoot, ["config", "user.email", "cloudproof-tests@example.com"]);
+  git(repoRoot, ["config", "user.name", "CloudProof Tests"]);
 
   mkdirSync(join(repoRoot, "migrations", "0001_init"), { recursive: true });
   writeFileSync(
@@ -484,10 +484,10 @@ describe("V-2: gate estático de riesgo crítico antes de Docker (auditoría 202
 });
 
 function createAppRouteRepo(route: string): { repoRoot: string; baseSha: string; headSha: string } {
-  const repoRoot = mkdtempSync(join(tmpdir(), "proof-route-"));
+  const repoRoot = mkdtempSync(join(tmpdir(), "cloudproof-route-"));
   git(repoRoot, ["init", "-q"]);
-  git(repoRoot, ["config", "user.email", "proof-tests@example.com"]);
-  git(repoRoot, ["config", "user.name", "Proof Tests"]);
+  git(repoRoot, ["config", "user.email", "cloudproof-tests@example.com"]);
+  git(repoRoot, ["config", "user.name", "CloudProof Tests"]);
   const routeDirectory = join(repoRoot, "src", "app", ...route.split("/"));
   mkdirSync(routeDirectory, { recursive: true });
   writeFileSync(
@@ -586,7 +586,7 @@ describe("change-aware coverage and adaptive matrix", () => {
       });
       expect(scenario.events.some((event) => event.includes("-s1"))).toBe(false);
       expect(bundle.assertions.some((item) => item.state === "COEXIST_A0_A1_S1")).toBe(false);
-      expect(bundle.assertions.find((item) => item.id === "proof.execution-complete")?.result).toBe(
+      expect(bundle.assertions.find((item) => item.id === "cloudproof.execution-complete")?.result).toBe(
         "pass",
       );
     } finally {
@@ -670,8 +670,8 @@ describe("parseFixtureEnvironment", () => {
           "AUTH_TOKEN=tok123",
           "SESSION=a b c",
           "BAD NAME=x",
-          "PROOF_BASE_URL=http://evil",
-          "proof_fixture_env=/tmp/x",
+          "CLOUDPROOF_BASE_URL=http://evil",
+          "cloudproof_fixture_env=/tmp/x",
           "NODE_OPTIONS=--require evil.js",
           "PATH=/evil",
           "=sin-nombre",

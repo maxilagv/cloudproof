@@ -1,5 +1,5 @@
 import type { Policy, PolicyViolation } from "./policy.js";
-import type { ProofBundle } from "@proof/schema";
+import type { CloudProofBundle } from "@cloudproof/schema";
 import { noDestructiveMigrations } from "./policies/no-destructive-migrations.js";
 
 // Solo se registran policies ejecutables. El módulo futuro de critical flows
@@ -19,7 +19,7 @@ export function getPolicy(id: string): Policy {
   return policy;
 }
 
-/** Evalúa una lista de policy ids (tal como aparecen en proof.config.ts) contra un Proof Bundle. */
-export function evaluatePolicies(policyIds: string[], bundle: ProofBundle): PolicyViolation[] {
+/** Evalúa una lista de policy ids (tal como aparecen en cloudproof.config.ts) contra un CloudProof Bundle. */
+export function evaluatePolicies(policyIds: string[], bundle: CloudProofBundle): PolicyViolation[] {
   return policyIds.flatMap((id) => getPolicy(id).evaluate(bundle));
 }

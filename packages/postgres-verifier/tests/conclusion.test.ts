@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { finalConclusion, routeAssertions } from "../dist/index.js";
-import type { ReplayResult } from "@proof/http-recorder";
+import type { ReplayResult } from "@cloudproof/http-recorder";
 
 const coverage = (routes: number) => ({ routesObserved: routes, routesDetected: routes });
 
@@ -43,7 +43,7 @@ describe("finalConclusion", () => {
         [
           { id: "workload.baseline", result: "pass" },
           { id: "postgres.old-app-new-schema.post-payments", result: "pass" },
-          { id: "proof.execution-complete", result: "pass" },
+          { id: "cloudproof.execution-complete", result: "pass" },
         ],
         coverage(2),
         ["POST", "GET"],
@@ -57,7 +57,7 @@ describe("finalConclusion", () => {
         [
           { id: "workload.baseline", result: "pass" },
           { id: "postgres.old-app-new-schema.get-payments", result: "pass" },
-          { id: "proof.execution-complete", result: "pass" },
+          { id: "cloudproof.execution-complete", result: "pass" },
         ],
         coverage(1),
         ["GET", "GET"],
@@ -108,7 +108,7 @@ describe("routeAssertions", () => {
     expect(assertion.evidence[0]).toBe("A0 sobre S1: POST /payments failed 3/3.");
     expect(assertion.evidence.join("\n")).toContain("SQLSTATE 23502");
     expect(assertion.reproduction).toBe(
-      `proof reproduce ${assertion.id}`,
+      `cloudproof reproduce ${assertion.id}`,
     );
   });
 

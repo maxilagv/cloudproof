@@ -1,7 +1,7 @@
 import { ProjectConfigSchema, type ProjectConfig, type ServiceConfig, type DataSourceConfig } from "./schema.js";
 
 /**
- * Ver tesis, sección 5.1 — ejemplo canónico de proof.config.ts:
+ * Ver tesis, sección 5.1 — ejemplo canónico de cloudproof.config.ts:
  *
  *   export default defineProject({
  *     services: { web: nextjs("./apps/web"), api: node("./apps/api") },

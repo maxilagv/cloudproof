@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderHumanReport } from "../dist/commands/release-verify.js";
-import type { Assertion, ProofBundle } from "@proof/schema";
+import type { Assertion, CloudProofBundle } from "@cloudproof/schema";
 
 function stripRemediation(assertion: Assertion): Assertion {
   const copy = { ...assertion };
@@ -8,7 +8,7 @@ function stripRemediation(assertion: Assertion): Assertion {
   return copy;
 }
 
-const unsafeBundle: ProofBundle = {
+const unsafeBundle: CloudProofBundle = {
   version: "1",
   subject: { baseSha: "a".repeat(40), headSha: "b".repeat(40) },
   conclusion: "UNSAFE",
@@ -23,7 +23,7 @@ const unsafeBundle: ProofBundle = {
         "HTTP 500 (baseline 201).",
         'SQLSTATE 23502: null value in column "currency" of relation "payments" violates not-null constraint',
       ],
-      reproduction: "proof reproduce postgres.old-app-new-schema.post-payments",
+      reproduction: "cloudproof reproduce postgres.old-app-new-schema.post-payments",
       remediation: {
         pattern: "postgres.not-null-column-old-app-writes",
         strategy: "expand-contract",
@@ -44,7 +44,7 @@ const unsafeBundle: ProofBundle = {
     {
       kind: "apply-remediation",
       assertionId: "postgres.old-app-new-schema.post-payments",
-      instruction: "Apply the remediation steps and re-run proof release verify.",
+      instruction: "Apply the remediation steps and re-run cloudproof release verify.",
     },
   ],
 };
@@ -60,24 +60,24 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
           relatedAssertionIds: ["postgres.old-app-new-schema.post-payments"],
         },
       ],
-      ".proof/release-verify-test-run.json",
+      ".cloudproof/release-verify-test-run.json",
     );
 
     expect(report).toContain("Tests normales: PASS");
     expect(report).toContain("Migration: APPLIED");
-    expect(report).toContain("RELEASE PROOF: UNSAFE");
+    expect(report).toContain("RELEASE CLOUDPROOF: UNSAFE");
     expect(report).toContain("Old application cannot write to migrated schema.");
     expect(report).toContain("POST /payments failed 3/3.");
     expect(report).toContain("SQLSTATE 23502");
     expect(report).toContain("Recommended:");
     expect(report).toContain("1. Add nullable column");
     expect(report).toContain("4. Add NOT NULL in later release");
-    expect(report).toContain("Reproduce: proof reproduce postgres.old-app-new-schema.post-payments");
+    expect(report).toContain("Reproduce: cloudproof reproduce postgres.old-app-new-schema.post-payments");
     expect(report).toContain("[policy] no-destructive-migrations");
   });
 
   it("UNSAFE sin receta de catálogo no inventa una recomendación", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       assertions: unsafeBundle.assertions.map((assertion) =>
         assertion.result === "fail"
@@ -89,12 +89,12 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
 
     const report = renderHumanReport(bundle, [], "x.json");
 
-    expect(report).toContain("RELEASE PROOF: UNSAFE");
+    expect(report).toContain("RELEASE CLOUDPROOF: UNSAFE");
     expect(report).not.toContain("Recommended:");
   });
 
   it("INCONCLUSIVE sin workload explica qué falta y lista las nextActions", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       conclusion: "INCONCLUSIVE",
       assertions: [],
@@ -104,29 +104,29 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
           kind: "add-workload",
           configPath: "workload",
           instruction:
-            "Declare a workload in proof.config.ts that drives the service through PROOF_BASE_URL.",
+            "Declare a workload in cloudproof.config.ts that drives the service through CLOUDPROOF_BASE_URL.",
         },
         {
           kind: "declare-coverage",
           configPath: "coverage.requiredRoutes",
-          instruction: "Declare the mandatory route universe in proof.config.ts.",
+          instruction: "Declare the mandatory route universe in cloudproof.config.ts.",
         },
       ],
     };
 
     const report = renderHumanReport(bundle, [], "x.json");
 
-    expect(report).toContain("RELEASE PROOF: INCONCLUSIVE");
+    expect(report).toContain("RELEASE CLOUDPROOF: INCONCLUSIVE");
     expect(report).toContain("No write workload observed");
     expect(report).toContain("Next:");
-    expect(report).toContain("1. Declare a workload in proof.config.ts");
+    expect(report).toContain("1. Declare a workload in cloudproof.config.ts");
     expect(report).toContain("2. Declare the mandatory route universe");
     expect(report).not.toContain("Recommended:");
     expect(report).not.toContain("Tests normales");
   });
 
   it("baseline roto → INCONCLUSIVE con la evidencia del workload, sin culpar a la migración", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       conclusion: "INCONCLUSIVE",
       assertions: [
@@ -155,7 +155,7 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
   });
 
   it("fingerprint roto se muestra antes que la coverage incompleta", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       conclusion: "INCONCLUSIVE",
       assertions: [
@@ -194,7 +194,7 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
   });
 
   it("distingue coverage declarada de una ruta realmente modificada sin tráfico", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       conclusion: "INCONCLUSIVE",
       assertions: [
@@ -239,7 +239,7 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
   });
 
   it("la matriz no se imprime cuando ninguna assertion declara state", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       assertions: [{ id: "workload.baseline", result: "pass", evidence: [] }],
     };
@@ -247,7 +247,7 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
   });
 
   it("muestra un cambio aprobado sin renderizarlo como fallo bloqueante ni recomendar receta", () => {
-    const bundle: ProofBundle = {
+    const bundle: CloudProofBundle = {
       ...unsafeBundle,
       conclusion: "VERIFIED",
       assertions: unsafeBundle.assertions.map((assertion) =>
@@ -263,7 +263,7 @@ describe("renderHumanReport — demo canónica (tesis 19.5)", () => {
 
     const report = renderHumanReport(bundle, [], "x.json");
 
-    expect(report).toContain("RELEASE PROOF: VERIFIED");
+    expect(report).toContain("RELEASE CLOUDPROOF: VERIFIED");
     expect(report).toContain("APPROVED CHANGE: postgres.old-app-new-schema.post-payments");
     expect(report).toContain("Cambio coordinado con consumidores");
     expect(report).not.toContain("Old application cannot write");

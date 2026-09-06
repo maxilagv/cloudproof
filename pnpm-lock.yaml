@@ -23,42 +23,42 @@ importers:
 
   packages/cli:
     dependencies:
+      '@cloudproof/config':
+        specifier: workspace:*
+        version: link:../config
+      '@cloudproof/docker-executor':
+        specifier: workspace:*
+        version: link:../docker-executor
+      '@cloudproof/http-recorder':
+        specifier: workspace:*
+        version: link:../http-recorder
+      '@cloudproof/plugin-github-actions':
+        specifier: workspace:*
+        version: link:../../plugins/github-actions
+      '@cloudproof/plugin-node':
+        specifier: workspace:*
+        version: link:../../plugins/node
+      '@cloudproof/plugin-postgres':
+        specifier: workspace:*
+        version: link:../../plugins/postgres
+      '@cloudproof/plugin-prisma':
+        specifier: workspace:*
+        version: link:../../plugins/prisma
+      '@cloudproof/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      '@cloudproof/policy-engine':
+        specifier: workspace:*
+        version: link:../policy-engine
+      '@cloudproof/postgres-verifier':
+        specifier: workspace:*
+        version: link:../postgres-verifier
+      '@cloudproof/schema':
+        specifier: workspace:*
+        version: link:../cloudproof-schema
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@3.25.76)
-      '@proof/config':
-        specifier: workspace:*
-        version: link:../config
-      '@proof/docker-executor':
-        specifier: workspace:*
-        version: link:../docker-executor
-      '@proof/http-recorder':
-        specifier: workspace:*
-        version: link:../http-recorder
-      '@proof/plugin-github-actions':
-        specifier: workspace:*
-        version: link:../../plugins/github-actions
-      '@proof/plugin-node':
-        specifier: workspace:*
-        version: link:../../plugins/node
-      '@proof/plugin-postgres':
-        specifier: workspace:*
-        version: link:../../plugins/postgres
-      '@proof/plugin-prisma':
-        specifier: workspace:*
-        version: link:../../plugins/prisma
-      '@proof/plugin-sdk':
-        specifier: workspace:*
-        version: link:../plugin-sdk
-      '@proof/policy-engine':
-        specifier: workspace:*
-        version: link:../policy-engine
-      '@proof/postgres-verifier':
-        specifier: workspace:*
-        version: link:../postgres-verifier
-      '@proof/schema':
-        specifier: workspace:*
-        version: link:../proof-schema
       commander:
         specifier: ^13.0.0
         version: 13.1.0
@@ -78,6 +78,22 @@ importers:
       '@types/semver':
         specifier: ^7.7.0
         version: 7.7.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
+
+  packages/cloudproof-schema:
+    dependencies:
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -106,9 +122,9 @@ importers:
 
   packages/docker-executor:
     dependencies:
-      '@proof/schema':
+      '@cloudproof/schema':
         specifier: workspace:*
-        version: link:../proof-schema
+        version: link:../cloudproof-schema
       cross-spawn:
         specifier: ^7.0.6
         version: 7.0.6
@@ -152,9 +168,9 @@ importers:
 
   packages/policy-engine:
     dependencies:
-      '@proof/schema':
+      '@cloudproof/schema':
         specifier: workspace:*
-        version: link:../proof-schema
+        version: link:../cloudproof-schema
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -165,31 +181,15 @@ importers:
 
   packages/postgres-verifier:
     dependencies:
-      '@proof/docker-executor':
+      '@cloudproof/docker-executor':
         specifier: workspace:*
         version: link:../docker-executor
-      '@proof/http-recorder':
+      '@cloudproof/http-recorder':
         specifier: workspace:*
         version: link:../http-recorder
-      '@proof/schema':
+      '@cloudproof/schema':
         specifier: workspace:*
-        version: link:../proof-schema
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.0
-        version: 22.20.1
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
-
-  packages/proof-schema:
-    dependencies:
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        version: link:../cloudproof-schema
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -203,12 +203,12 @@ importers:
 
   plugins/github-actions:
     dependencies:
-      '@proof/plugin-sdk':
+      '@cloudproof/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
-      '@proof/schema':
+      '@cloudproof/schema':
         specifier: workspace:*
-        version: link:../../packages/proof-schema
+        version: link:../../packages/cloudproof-schema
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -222,7 +222,7 @@ importers:
 
   plugins/node:
     dependencies:
-      '@proof/plugin-sdk':
+      '@cloudproof/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:
@@ -238,7 +238,7 @@ importers:
 
   plugins/postgres:
     dependencies:
-      '@proof/plugin-sdk':
+      '@cloudproof/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:
@@ -254,7 +254,7 @@ importers:
 
   plugins/prisma:
     dependencies:
-      '@proof/plugin-sdk':
+      '@cloudproof/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     devDependencies:

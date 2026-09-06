@@ -7,7 +7,7 @@
   "include": ["src"],
   "references": [
     { "path": "../config" },
-    { "path": "../proof-schema" },
+    { "path": "../cloudproof-schema" },
     { "path": "../docker-executor" },
     { "path": "../postgres-verifier" },
     { "path": "../policy-engine" },

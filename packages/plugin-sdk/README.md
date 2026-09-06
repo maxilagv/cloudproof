@@ -1,6 +1,6 @@
-# @proof/plugin-sdk
+# @cloudproof/plugin-sdk
 
-Interfaz mínima para plugins. En el MVP (Fase 1-2), solo se define `Detector` — la capacidad que usan `proof init` y `proof doctor` para reconocer el stack del repositorio.
+Interfaz mínima para plugins. En el MVP (Fase 1-2), solo se define `Detector` — la capacidad que usan `cloudproof init` y `cloudproof doctor` para reconocer el stack del repositorio.
 
 ## Alcance deliberadamente mínimo
 

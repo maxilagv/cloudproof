@@ -1,4 +1,4 @@
-import type { Assertion, Conclusion, Coverage, NextAction } from "@proof/schema";
+import type { Assertion, Conclusion, Coverage, NextAction } from "@cloudproof/schema";
 
 /**
  * Deriva las nextActions de un bundle: la lista tipada de "qué falta y cómo
@@ -11,7 +11,7 @@ import type { Assertion, Conclusion, Coverage, NextAction } from "@proof/schema"
  */
 
 export interface NextActionContext {
-  /** proof.config.ts declara un workload. */
+  /** cloudproof.config.ts declara un workload. */
   workloadDeclared: boolean;
   /** Cantidad de exchanges HTTP grabados por el Recorder. */
   observedExchanges: number;
@@ -22,7 +22,7 @@ export interface NextActionContext {
 }
 
 const RERUN_VERIFY =
-  "then re-run `proof release verify` with the same --base-sha/--head-sha until the conclusion is VERIFIED";
+  "then re-run `cloudproof release verify` with the same --base-sha/--head-sha until the conclusion is VERIFIED";
 
 /** Etapas cuya ausencia de evidencia es un prerequisito de infraestructura. */
 const INFRA_STAGE_IDS = new Set([
@@ -86,6 +86,42 @@ export function deriveNextActions(
     ];
   }
 
+  // Historia de migraciones del commit base irreplayable (informe Lubrisur
+  // 2026-07, 2ª ronda): es LA causa raíz — ninguna otra acción (workload,
+  // coverage) puede ejecutarse sin un S0, así que la acción es única y
+  // lleva la atribución y los caminos seguros ya resueltos.
+  const migrationHistory = assertions.find(
+    (assertion) => assertion.id === "postgres.migration-history" && assertion.result !== "pass",
+  );
+  if (migrationHistory !== undefined) {
+    const cause =
+      migrationHistory.evidence[1] ?? migrationHistory.evidence[0] ?? "unreplayable history";
+    return [
+      {
+        kind: "repair-migration-history",
+        assertionId: "postgres.migration-history",
+        instruction:
+          `The BASE commit's migration history cannot be replayed on an empty database (${cause}). ` +
+          `This pre-dates the candidate: S0 is built from the base commit alone, so the new changes ` +
+          `are NOT the cause. Do NOT edit already-applied migrations — Prisma checksums would ` +
+          `diverge from production. Safe options, in order: ` +
+          `(1) declare data.<name>.schemaBaseline in cloudproof.config.ts pointing to a SQL dump of ` +
+          `the DEPLOYED database that includes the _prisma_migrations table ` +
+          `(pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges, plus ` +
+          `pg_dump "$DATABASE_URL" --data-only --table=_prisma_migrations --no-owner --no-privileges); ` +
+          `CloudProof will then build S0 from that dump and apply only the migrations production has ` +
+          `not applied yet — the exact transition production will execute; ` +
+          `(2) if --base-sha does not match what is actually deployed, re-run against the real deployed SHA; ` +
+          `(3) repair the history in a DEDICATED release by squashing to a new baseline with ` +
+          `prisma migrate diff + prisma migrate resolve, verified on a staging copy first. ` +
+          `Once one path is applied, ${RERUN_VERIFY}.`,
+        ...(migrationHistory.reproduction === undefined
+          ? {}
+          : { command: migrationHistory.reproduction }),
+      },
+    ];
+  }
+
   const infraSkipped = assertions.filter(
     (assertion) =>
       assertion.result === "skipped" &&
@@ -114,8 +150,8 @@ export function deriveNextActions(
       kind: "declare-coverage",
       configPath: "coverage.requiredRoutes",
       instruction:
-        "Declare the mandatory route universe in proof.config.ts under coverage.requiredRoutes " +
-        '(e.g. ["POST /payments", "GET /payments"]). Without it the proof cannot claim complete coverage, ' +
+        "Declare the mandatory route universe in cloudproof.config.ts under coverage.requiredRoutes " +
+        '(e.g. ["POST /payments", "GET /payments"]). Without it the cloudproof cannot claim complete coverage, ' +
         RERUN_VERIFY + ".",
     });
   }
@@ -126,7 +162,7 @@ export function deriveNextActions(
       subject: route,
       instruction:
         `Required route ${route} was never exercised by the workload. Add (or fix) a test in the ` +
-        `declared workload that calls ${route} through PROOF_BASE_URL, ${RERUN_VERIFY}.`,
+        `declared workload that calls ${route} through CLOUDPROOF_BASE_URL, ${RERUN_VERIFY}.`,
     });
   }
 
@@ -135,8 +171,8 @@ export function deriveNextActions(
       kind: "add-workload",
       configPath: "workload",
       instruction:
-        "Declare a workload in proof.config.ts (e.g. your e2e suite) that drives the service " +
-        "through the URL in the PROOF_BASE_URL environment variable, " +
+        "Declare a workload in cloudproof.config.ts (e.g. your e2e suite) that drives the service " +
+        "through the URL in the CLOUDPROOF_BASE_URL environment variable, " +
         RERUN_VERIFY +
         ".",
     });
@@ -146,7 +182,7 @@ export function deriveNextActions(
       configPath: "workload",
       instruction:
         "The declared workload produced no recorded HTTP traffic. Make sure it sends its requests " +
-        "to the URL in PROOF_BASE_URL (not a hardcoded host/port), " +
+        "to the URL in CLOUDPROOF_BASE_URL (not a hardcoded host/port), " +
         RERUN_VERIFY +
         ".",
     });
@@ -155,7 +191,7 @@ export function deriveNextActions(
       kind: "add-write-workload",
       instruction:
         "The workload performed no HTTP writes (POST/PUT/PATCH/DELETE), so schema compatibility for " +
-        "writes is unproven. Add a test that writes through PROOF_BASE_URL, " +
+        "writes is unproven. Add a test that writes through CLOUDPROOF_BASE_URL, " +
         RERUN_VERIFY +
         ".",
     });
@@ -184,11 +220,11 @@ export function deriveNextActions(
 
   if (actions.length === 0) {
     // Red de seguridad del invariante: p.ej. un fallo aprobado impidió
-    // ejecutar los estados restantes (proof.execution-complete ausente).
+    // ejecutar los estados restantes (cloudproof.execution-complete ausente).
     actions.push({
       kind: "rerun-stage",
       instruction:
-        "Mandatory proof states did not complete (an approved stage failure or missing evidence " +
+        "Mandatory cloudproof states did not complete (an approved stage failure or missing evidence " +
         "prevented full execution). Inspect the bundle assertions, address the cause, " +
         RERUN_VERIFY +
         ".",

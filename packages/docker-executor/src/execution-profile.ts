@@ -30,10 +30,10 @@ const SAFE_INHERITED_ENV = new Set([
   "PATH",
   "PATHEXT",
   "PROCESSOR_ARCHITECTURE",
-  "PROOF_EXECUTION_PROFILE",
-  "PROOF_EXECUTION_PROFILE_LOCKED",
-  "PROOF_EPHEMERAL_RUNNER",
-  "PROOF_SECRETLESS_RUNNER",
+  "CLOUDPROOF_EXECUTION_PROFILE",
+  "CLOUDPROOF_EXECUTION_PROFILE_LOCKED",
+  "CLOUDPROOF_EPHEMERAL_RUNNER",
+  "CLOUDPROOF_SECRETLESS_RUNNER",
   "SYSTEMDRIVE",
   "SYSTEMROOT",
   "TEMP",
@@ -59,34 +59,34 @@ export function resolveExecutionProfile(
       `${variable} invalido: "${raw}". Usa trusted, internal o fork.`,
     );
   };
-  const raw = env["PROOF_EXECUTION_PROFILE"];
-  const lockRaw = env["PROOF_EXECUTION_PROFILE_LOCKED"];
+  const raw = env["CLOUDPROOF_EXECUTION_PROFILE"];
+  const lockRaw = env["CLOUDPROOF_EXECUTION_PROFILE_LOCKED"];
   const hasSelection = override !== undefined || (raw !== undefined && raw.trim() !== "");
   const requested =
     override ??
     (raw === undefined || raw.trim() === ""
       ? "trusted"
-      : parse(raw, "PROOF_EXECUTION_PROFILE"));
+      : parse(raw, "CLOUDPROOF_EXECUTION_PROFILE"));
   if (lockRaw === undefined || lockRaw.trim() === "") return requested;
 
-  const locked = parse(lockRaw, "PROOF_EXECUTION_PROFILE_LOCKED");
+  const locked = parse(lockRaw, "CLOUDPROOF_EXECUTION_PROFILE_LOCKED");
   const rank: Record<ExecutionProfile, number> = { trusted: 0, internal: 1, fork: 2 };
   if (hasSelection && rank[requested] < rank[locked]) {
     throw new ExecutorError(
       `Se rechazo el downgrade de perfil ${locked} -> ${requested}; ` +
-        "PROOF_EXECUTION_PROFILE_LOCKED solo permite endurecer el aislamiento.",
+        "CLOUDPROOF_EXECUTION_PROFILE_LOCKED solo permite endurecer el aislamiento.",
     );
   }
   return rank[requested] > rank[locked] ? requested : locked;
 }
 
 export function isEphemeralRunner(env: NodeJS.ProcessEnv = process.env): boolean {
-  const marker = env["PROOF_EPHEMERAL_RUNNER"]?.trim().toLowerCase();
+  const marker = env["CLOUDPROOF_EPHEMERAL_RUNNER"]?.trim().toLowerCase();
   return marker === "1" || marker === "true";
 }
 
 export function isSecretlessRunner(env: NodeJS.ProcessEnv = process.env): boolean {
-  const marker = env["PROOF_SECRETLESS_RUNNER"]?.trim().toLowerCase();
+  const marker = env["CLOUDPROOF_SECRETLESS_RUNNER"]?.trim().toLowerCase();
   return marker === "1" || marker === "true";
 }
 
@@ -109,7 +109,7 @@ export function assertHostWorkloadAllowed(
   if (!isEphemeralRunner(env) || !isSecretlessRunner(env)) {
     throw new ExecutorError(
       "El perfil internal solo permite workload host en un runner efimero y sin secretos. " +
-        "Declara PROOF_EPHEMERAL_RUNNER=1 y PROOF_SECRETLESS_RUNNER=1 despues de aislarlo.",
+        "Declara CLOUDPROOF_EPHEMERAL_RUNNER=1 y CLOUDPROOF_SECRETLESS_RUNNER=1 despues de aislarlo.",
     );
   }
 }
@@ -173,7 +173,7 @@ export function looksSensitiveValue(value: string): boolean {
 export function assertValidEnvironment(
   env: Record<string, string>,
   profile: ExecutionProfile,
-  options: { allowProofDatabaseUrl?: boolean } = {},
+  options: { allowCloudProofDatabaseUrl?: boolean } = {},
 ): void {
   for (const [name, value] of Object.entries(env)) {
     if (!ENVIRONMENT_NAME.test(name)) {
@@ -184,11 +184,11 @@ export function assertValidEnvironment(
     }
     if (profile !== "fork") continue;
 
-    const proofDatabaseUrl =
-      options.allowProofDatabaseUrl === true &&
+    const cloudproofDatabaseUrl =
+      options.allowCloudProofDatabaseUrl === true &&
       name === "DATABASE_URL" &&
-      /^postgres(?:ql)?:\/\/proof:proof@proof-pg-[A-Za-z0-9_.-]+:5432\/proof$/.test(value);
-    if (!proofDatabaseUrl && (isSensitiveName(name) || looksSensitiveValue(value))) {
+      /^postgres(?:ql)?:\/\/cloudproof:cloudproof@cloudproof-pg-[A-Za-z0-9_.-]+:5432\/cloudproof$/.test(value);
+    if (!cloudproofDatabaseUrl && (isSensitiveName(name) || looksSensitiveValue(value))) {
       throw new ExecutorError(
         `El perfil fork rechazo la variable sensible ${name}. ` +
           `Los secretos del repo/runner no pueden entrar al contenedor candidato.`,
@@ -207,7 +207,7 @@ export function assertSafeBuildArgs(
     if (isSensitiveName(name) || looksSensitiveValue(value)) {
       throw new ExecutorError(
         `El perfil ${profile} rechazo el build arg sensible ${name}. ` +
-          `Usa una imagen preconstruida o secretos BuildKit fuera de Proof.`,
+          `Usa una imagen preconstruida o secretos BuildKit fuera de CloudProof.`,
       );
     }
   }

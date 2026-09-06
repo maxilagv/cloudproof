@@ -2,16 +2,16 @@ import {
   sweepResidues,
   type CommandRunner,
   type SweepReport,
-} from "@proof/docker-executor";
+} from "@cloudproof/docker-executor";
 import { paint, symbols } from "../ui.js";
 
 /**
- * `proof cleanup`: barrido de primera clase de los residuos Docker de Proof
- * (P0 del informe 2026-07-18). La base ya existía — labels dev.proof.owner /
- * dev.proof.run y sweepAll() — pero solo se ejecutaba implícitamente; este
+ * `cloudproof cleanup`: barrido de primera clase de los residuos Docker de CloudProof
+ * (P0 del informe 2026-07-18). La base ya existía — labels dev.cloudproof.owner /
+ * dev.cloudproof.run y sweepAll() — pero solo se ejecutaba implícitamente; este
  * comando la expone con --dry-run para inspeccionar antes de eliminar.
  *
- * Solo toca recursos etiquetados por Proof: jamás un contenedor ajeno.
+ * Solo toca recursos etiquetados por CloudProof: jamás un contenedor ajeno.
  */
 export interface CleanupOptions {
   json?: boolean;
@@ -44,7 +44,7 @@ export function renderCleanupReport(report: SweepReport): string {
   const lines: string[] = [];
   const total = report.containers.length + report.networks.length;
   if (total === 0) {
-    return `${symbols.ok} ${paint.green("Sin residuos de Proof: no hay contenedores ni redes con label dev.proof.owner.")}\n`;
+    return `${symbols.ok} ${paint.green("Sin residuos de CloudProof: no hay contenedores ni redes con label dev.cloudproof.owner.")}\n`;
   }
 
   const describe = (residue: { name: string; runId?: string }) =>
@@ -61,7 +61,7 @@ export function renderCleanupReport(report: SweepReport): string {
 
   if (!report.removed) {
     lines.push(
-      `${symbols.warn} ${paint.yellow("--dry-run: no se eliminó nada.")} ${paint.dim("Corré")} ${paint.cyan("proof cleanup")} ${paint.dim("para eliminarlos.")}`,
+      `${symbols.warn} ${paint.yellow("--dry-run: no se eliminó nada.")} ${paint.dim("Corré")} ${paint.cyan("cloudproof cleanup")} ${paint.dim("para eliminarlos.")}`,
     );
   } else if (report.failures.length === 0) {
     lines.push(

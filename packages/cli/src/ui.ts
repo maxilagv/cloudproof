@@ -43,7 +43,7 @@ export const symbols = {
   dot: stdoutColors ? paint.gray("·") : "-",
 };
 
-/** Badge coloreado para el enum de conclusión del Proof Bundle. */
+/** Badge coloreado para el enum de conclusión del CloudProof Bundle. */
 export function conclusionBadge(conclusion: string): string {
   if (!stdoutColors) return conclusion;
   const bg =
@@ -65,7 +65,7 @@ export function severityLabel(severity: string): string {
 }
 
 /**
- * Wordmark compacto (figlet "calvin s"). Se muestra en `proof` sin
+ * Wordmark compacto (figlet "calvin s"). Se muestra en `cloudproof` sin
  * argumentos y encabezando --help; nunca en salidas --json ni en MCP.
  */
 export function banner(version: string): string {
@@ -81,7 +81,7 @@ export function banner(version: string): string {
 }
 
 /**
- * Mascota ASCII de Proof: una nube con anteojos, sonrisa y chispas a los
+ * Mascota ASCII de CloudProof: una nube con anteojos, sonrisa y chispas a los
  * costados. Mismos glifos con o sin color (solo el ANSI se apaga bajo
  * NO_COLOR/pipes/CI); vive únicamente en `welcome()` para no repetirse en
  * cada `--help`, donde sigue el wordmark compacto de `banner()`.
@@ -100,27 +100,27 @@ export function mascot(): string {
   ].join("\n");
 }
 
-/** Bloque de arranque para `proof` sin argumentos. */
+/** Bloque de arranque para `cloudproof` sin argumentos. */
 export function welcome(version: string): string {
   const row = (command: string, description: string) =>
     `  ${paint.bold(command.padEnd(28))}${paint.dim(description)}`;
   return [
     mascot(),
-    `  ${paint.bold("proof")} ${paint.gray(`v${version}`)}`,
+    `  ${paint.bold("cloudproof")} ${paint.gray(`v${version}`)}`,
     paint.dim("  Evidencia ejecutada, reproducible y firmable — no una opinión."),
     "",
     paint.bold("  Comandos"),
-    row("init", "detecta el stack y genera proof.config.ts + AGENTS.md"),
+    row("init", "detecta el stack y genera cloudproof.config.ts + AGENTS.md"),
     row("doctor", "valida runtime, Docker, config, workload y cobertura"),
-    row("release verify", "prueba A0+S0 → A0+S1 y emite el Proof Bundle"),
+    row("release verify", "prueba A0+S0 → A0+S1 y emite el CloudProof Bundle"),
     row("reproduce <assertion-id>", "reconstruye un finding en vivo (app + Postgres)"),
-    row("cleanup", "elimina contenedores/redes residuales de Proof (--dry-run)"),
-    row("bundle sign|verify", "firma Ed25519 y verificación del Proof Bundle"),
+    row("cleanup", "elimina contenedores/redes residuales de CloudProof (--dry-run)"),
+    row("bundle sign|verify", "firma Ed25519 y verificación del CloudProof Bundle"),
     row("check", "release verify + Check Run de GitHub (para CI)"),
     row("mcp serve", "expone la verificación como tools MCP para agentes"),
     "",
-    `  ${paint.dim("Empezá con")} ${paint.cyan("proof init")} ${paint.dim("y seguí con")} ${paint.cyan("proof doctor")}${paint.dim(".")}`,
-    `  ${paint.dim("Ayuda por comando:")} ${paint.cyan("proof <comando> --help")}`,
+    `  ${paint.dim("Empezá con")} ${paint.cyan("cloudproof init")} ${paint.dim("y seguí con")} ${paint.cyan("cloudproof doctor")}${paint.dim(".")}`,
+    `  ${paint.dim("Ayuda por comando:")} ${paint.cyan("cloudproof <comando> --help")}`,
     "",
   ].join("\n");
 }

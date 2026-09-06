@@ -6,17 +6,17 @@ import { randomUUID } from "node:crypto";
 import { ComposeExecutor, SpawnRunner, waitPostgresTcpReady } from "../dist/index.js";
 
 /**
- * Tests de integración contra Docker REAL. Gated por PROOF_DOCKER_IT=1:
+ * Tests de integración contra Docker REAL. Gated por CLOUDPROOF_DOCKER_IT=1:
  * no corren en un `pnpm test` normal, y si el flag está activo pero el
  * daemon no responde, FALLAN ruidosamente en vez de skippear en silencio
  * (un skip silencioso con el flag puesto sería un resultado fabricado).
  *
  * El camino completo de Postgres+Prisma (descarga prisma dentro del
- * contenedor) está detrás de PROOF_DOCKER_IT_FULL=1 porque tarda minutos
+ * contenedor) está detrás de CLOUDPROOF_DOCKER_IT_FULL=1 porque tarda minutos
  * la primera vez.
  */
-const enabled = process.env["PROOF_DOCKER_IT"] === "1";
-const fullEnabled = process.env["PROOF_DOCKER_IT_FULL"] === "1";
+const enabled = process.env["CLOUDPROOF_DOCKER_IT"] === "1";
+const fullEnabled = process.env["CLOUDPROOF_DOCKER_IT_FULL"] === "1";
 
 if (enabled) {
   const probe = await new SpawnRunner()
@@ -24,7 +24,7 @@ if (enabled) {
     .catch(() => ({ exitCode: -1, stdout: "", stderr: "docker no ejecutable" }));
   if (probe.exitCode !== 0) {
     throw new Error(
-      `PROOF_DOCKER_IT=1 pero el daemon de Docker no responde:\n${probe.stderr.slice(-500)}`,
+      `CLOUDPROOF_DOCKER_IT=1 pero el daemon de Docker no responde:\n${probe.stderr.slice(-500)}`,
     );
   }
 }
@@ -32,13 +32,13 @@ if (enabled) {
 const runner = new SpawnRunner();
 
 describe.skipIf(!enabled)("fingerprint de schema contra PostgreSQL 16 real", () => {
-  const containerName = `proof-fingerprint-${randomUUID().slice(0, 8)}`;
+  const containerName = `cloudproof-fingerprint-${randomUUID().slice(0, 8)}`;
   let containerId = "";
   let scratch = "";
   let executor: ComposeExecutor;
 
   beforeAll(async () => {
-    scratch = mkdtempSync(join(tmpdir(), "proof-fingerprint-it-"));
+    scratch = mkdtempSync(join(tmpdir(), "cloudproof-fingerprint-it-"));
     const started = await runner.run(
       "docker",
       [
@@ -48,11 +48,11 @@ describe.skipIf(!enabled)("fingerprint de schema contra PostgreSQL 16 real", () 
         "--name",
         containerName,
         "-e",
-        "POSTGRES_USER=proof",
+        "POSTGRES_USER=cloudproof",
         "-e",
-        "POSTGRES_PASSWORD=proof",
+        "POSTGRES_PASSWORD=cloudproof",
         "-e",
-        "POSTGRES_DB=proof",
+        "POSTGRES_DB=cloudproof",
         "postgres:16-alpine",
       ],
       { timeoutMs: 120_000 },
@@ -84,9 +84,9 @@ describe.skipIf(!enabled)("fingerprint de schema contra PostgreSQL 16 real", () 
       "-v",
       "ON_ERROR_STOP=1",
       "-U",
-      "proof",
+      "cloudproof",
       "-d",
-      "proof",
+      "cloudproof",
       "-c",
       statement,
     ]);
@@ -131,13 +131,13 @@ function writeFiles(root: string, files: Record<string, string>): void {
 }
 
 async function makeThrowawayRepo(files: Record<string, string>): Promise<{ repo: string; sha: string; tmp: string }> {
-  const tmp = mkdtempSync(join(tmpdir(), "proof-it-"));
+  const tmp = mkdtempSync(join(tmpdir(), "cloudproof-it-"));
   const repo = join(tmp, "repo");
   mkdirSync(repo);
   writeFiles(repo, files);
   await sh("git", ["init", "-b", "main"], repo);
-  await sh("git", ["config", "user.email", "it@proof.local"], repo);
-  await sh("git", ["config", "user.name", "proof-it"], repo);
+  await sh("git", ["config", "user.email", "it@cloudproof.local"], repo);
+  await sh("git", ["config", "user.name", "cloudproof-it"], repo);
   await sh("git", ["add", "-A"], repo);
   await sh("git", ["commit", "-m", "it fixture"], repo);
   const sha = await sh("git", ["rev-parse", "HEAD"], repo);
@@ -174,7 +174,7 @@ describe.skipIf(!enabled)("integración 1.A con Docker real", () => {
 
   it("build → startApp → responde HTTP → teardown, sin residuos de la corrida", async () => {
     const tag = await executor.buildImage({ sha, servicePath: "." });
-    expect(tag).toMatch(/^proof-app:/);
+    expect(tag).toMatch(/^cloudproof-app:/);
 
     const app = await executor.startApp(tag, {});
     expect(app.connectionUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
@@ -186,14 +186,14 @@ describe.skipIf(!enabled)("integración 1.A con Docker real", () => {
       app.id,
     ]);
     expect(Object.keys(JSON.parse(appNetworks.stdout) as Record<string, unknown>)).toEqual([
-      `proof-net-${executor.runId}`,
+      `cloudproof-net-${executor.runId}`,
     ]);
     const internal = await runner.run("docker", [
       "network",
       "inspect",
       "-f",
       "{{.Internal}}",
-      `proof-net-${executor.runId}`,
+      `cloudproof-net-${executor.runId}`,
     ]);
     expect(internal.stdout.trim()).toBe("true");
 
@@ -207,7 +207,7 @@ describe.skipIf(!enabled)("integración 1.A con Docker real", () => {
       "ps",
       "-aq",
       "--filter",
-      `label=dev.proof.run=${executor.runId}`,
+      `label=dev.cloudproof.run=${executor.runId}`,
     ]);
     expect(leftovers.stdout.trim()).toBe("");
   }, 300_000);
@@ -226,7 +226,7 @@ describe.skipIf(!enabled)("integración 1.A con Docker real", () => {
       "ps",
       "-aq",
       "--filter",
-      `label=dev.proof.run=${executor.runId}`,
+      `label=dev.cloudproof.run=${executor.runId}`,
     ]);
     expect(leftovers.stdout.trim()).toBe("");
   }, 600_000);
@@ -282,9 +282,9 @@ describe.skipIf(!enabled || !fullEnabled)("integración 1.A: Postgres efímero +
       pg.id,
       "psql",
       "-U",
-      "proof",
+      "cloudproof",
       "-d",
-      "proof",
+      "cloudproof",
       "-c",
       "SELECT count(*) FROM demo;",
     ]);

@@ -5,7 +5,7 @@ import type {
   ReplayResult,
 } from "./types.js";
 
-const POLICY_ID = "proof-safe-evidence-v1";
+const POLICY_ID = "cloudproof-safe-evidence-v1";
 const DEFAULT_REPLACEMENT = "[REDACTED]";
 const DEFAULT_SENSITIVE_HEADERS = [
   "authorization",
@@ -279,7 +279,7 @@ function redactPath(
   policy: ResolvedPolicy,
   summary: RedactionSummary,
 ): string {
-  const url = new URL(path, "http://proof-redaction.invalid");
+  const url = new URL(path, "http://cloudproof-redaction.invalid");
   const pathname = url.pathname
     .split("/")
     .map((segment) => {

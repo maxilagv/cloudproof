@@ -13,6 +13,10 @@ export {
   type RouteAssertionOptions,
 } from "./verify.js";
 export { remediationFor, withRemediation } from "./remediation.js";
+export {
+  classifyMigrationApplyFailure,
+  type MigrationApplyFailure,
+} from "./migration-history.js";
 export { deriveNextActions, type NextActionContext } from "./next-actions.js";
 export type { MatrixState, MatrixStateId } from "./matrix.js";
 export {

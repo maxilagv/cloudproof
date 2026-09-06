@@ -7,7 +7,7 @@ import { classifyEnvKeys } from "../src/commands/env-classifier.js";
 const roots: string[] = [];
 
 function repo(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "proof-env-classifier-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-env-classifier-"));
   roots.push(root);
   for (const [relativePath, contents] of Object.entries(files)) {
     const absolutePath = join(root, relativePath);

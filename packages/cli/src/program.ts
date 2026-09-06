@@ -15,7 +15,7 @@ import { banner, paint } from "./ui.js";
  * más que para despachar `mcp serve`, que no imprime nada en stdout.
  *
  * Los comandos se importan de forma DIFERIDA dentro de cada action:
- * `proof`, `proof --version` y `proof --help` no cargan el executor ni el
+ * `cloudproof`, `cloudproof --version` y `cloudproof --help` no cargan el executor ni el
  * SDK de MCP, así el primer contacto es instantáneo y no requiere Docker.
  */
 
@@ -29,28 +29,28 @@ export function buildProgram(): Command {
   const program = new Command();
 
   program
-    .name("proof")
+    .name("cloudproof")
     .description("Evidence Plane determinista para cambios stateful")
     .version(CLI_VERSION, "-v, --version", "muestra la versión")
     .showSuggestionAfterError(true)
-    .showHelpAfterError(paint.dim("(corré `proof --help` para ver los comandos disponibles)"))
+    .showHelpAfterError(paint.dim("(corré `cloudproof --help` para ver los comandos disponibles)"))
     .addHelpText("beforeAll", banner(CLI_VERSION))
     .addHelpText(
       "after",
       [
         "",
         paint.bold("Ejemplos"),
-        `  ${paint.cyan("proof init")}                        ${paint.dim("detecta el stack y genera proof.config.ts")}`,
-        `  ${paint.cyan("proof release plan --base-sha <deployed> --head-sha <candidato>")}`,
-        `  ${paint.cyan("proof release verify --base-sha <deployed> --head-sha <candidato>")}`,
-        `  ${paint.cyan("proof reproduce <assertion-id>")}    ${paint.dim("reconstruye un finding en vivo")}`,
+        `  ${paint.cyan("cloudproof init")}                        ${paint.dim("detecta el stack y genera cloudproof.config.ts")}`,
+        `  ${paint.cyan("cloudproof release plan --base-sha <deployed> --head-sha <candidato>")}`,
+        `  ${paint.cyan("cloudproof release verify --base-sha <deployed> --head-sha <candidato>")}`,
+        `  ${paint.cyan("cloudproof reproduce <assertion-id>")}    ${paint.dim("reconstruye un finding en vivo")}`,
         "",
       ].join("\n"),
     );
 
   program
     .command("init")
-    .description("Detecta el stack del repositorio y genera proof.config.ts + AGENTS.md")
+    .description("Detecta el stack del repositorio y genera cloudproof.config.ts + AGENTS.md")
     .option("--json", "salida en JSON")
     .action(async (opts) => {
       const { runInit } = await import("./commands/init.js");
@@ -78,7 +78,7 @@ export function buildProgram(): Command {
     .requiredOption("--base-sha <sha>", "SHA de la version desplegada")
     .option("--head-sha <sha>", "SHA del candidato")
     .option("--worktree", "planifica un snapshot inmutable del worktree sin crear un commit en la rama")
-    .option("--service <name>", "servicio declarado en proof.config")
+    .option("--service <name>", "servicio declarado en cloudproof.config")
     .option("--profile <profile>", "trusted, internal o fork")
     .option("--json", "salida en JSON")
     .action(async (opts) => {
@@ -94,11 +94,11 @@ export function buildProgram(): Command {
     });
   release
     .command("verify")
-    .description("Ejecuta la matriz adaptativa exigida por el diff; genera un Proof Bundle")
+    .description("Ejecuta la matriz adaptativa exigida por el diff; genera un CloudProof Bundle")
     .requiredOption("--base-sha <sha>", "SHA de la versión desplegada")
     .option("--head-sha <sha>", "SHA del candidato")
     .option("--worktree", "verifica un snapshot inmutable del worktree sin crear un commit en la rama")
-    .option("--service <name>", "servicio declarado en proof.config")
+    .option("--service <name>", "servicio declarado en cloudproof.config")
     .option("--profile <profile>", "trusted, internal o fork")
     .option("--json", "salida en JSON")
     .action(async (opts) => {
@@ -115,9 +115,9 @@ export function buildProgram(): Command {
 
   program
     .command("reproduce <assertionId>")
-    .description("Muestra y reproduce localmente un finding de un Proof Bundle previo")
+    .description("Muestra y reproduce localmente un finding de un CloudProof Bundle previo")
     .option("--json", "salida en JSON")
-    .option("--bundle <path>", "Proof Bundle exacto cuando el id aparece en más de una corrida")
+    .option("--bundle <path>", "CloudProof Bundle exacto cuando el id aparece en más de una corrida")
     .option("--cleanup", "elimina los contenedores y la red de esta reproducción")
     .action(async (assertionId, opts) => {
       const { runReproduce } = await import("./commands/reproduce.js");
@@ -130,10 +130,10 @@ export function buildProgram(): Command {
 
   const bundle = program
     .command("bundle")
-    .description("Firma, verificación e inspección de Proof Bundles");
+    .description("Firma, verificación e inspección de CloudProof Bundles");
   bundle
     .command("keygen")
-    .description("Genera el par Ed25519 de firma local en .proof/keys/")
+    .description("Genera el par Ed25519 de firma local en .cloudproof/keys/")
     .option("--force", "regenera aunque ya exista una clave")
     .option("--json", "salida en JSON")
     .action(async (opts) => {
@@ -143,7 +143,7 @@ export function buildProgram(): Command {
   bundle
     .command("sign <bundle>")
     .description("Firma el payload canónico del Bundle (Ed25519, DSSE PAE)")
-    .option("--key <path>", "clave privada PEM; default .proof/keys/proof-signing.key")
+    .option("--key <path>", "clave privada PEM; default .cloudproof/keys/cloudproof-signing.key")
     .option("--json", "salida en JSON")
     .action(async (bundlePath, opts) => {
       const { runBundleSign } = await import("./commands/bundle.js");
@@ -152,7 +152,7 @@ export function buildProgram(): Command {
   bundle
     .command("verify <bundle>")
     .description("Verifica integridad y firma; sin clave pública nunca declara confianza")
-    .option("--key <path>", "clave pública PEM; default .proof/keys/proof-signing.pub")
+    .option("--key <path>", "clave pública PEM; default .cloudproof/keys/cloudproof-signing.pub")
     .option("--attestation <path>", "attestation; default <bundle>.attestation.json")
     .option("--json", "salida en JSON")
     .action(async (bundlePath, opts) => {
@@ -166,7 +166,7 @@ export function buildProgram(): Command {
     });
   bundle
     .command("inspect <bundle>")
-    .description("Resumen humano/JSON de un Proof Bundle: veredicto, matriz, cobertura")
+    .description("Resumen humano/JSON de un CloudProof Bundle: veredicto, matriz, cobertura")
     .option("--json", "salida en JSON")
     .action(async (bundlePath, opts) => {
       const { runBundleInspect } = await import("./commands/bundle.js");
@@ -175,7 +175,7 @@ export function buildProgram(): Command {
 
   program
     .command("cleanup")
-    .description("Elimina contenedores y redes residuales de Proof (label dev.proof.owner)")
+    .description("Elimina contenedores y redes residuales de CloudProof (label dev.cloudproof.owner)")
     .option("--dry-run", "lista los residuos sin eliminarlos")
     .option("--json", "salida en JSON")
     .action(async (opts) => {

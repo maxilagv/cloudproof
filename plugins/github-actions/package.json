@@ -1,5 +1,5 @@
 {
-  "name": "@proof/plugin-github-actions",
+  "name": "@cloudproof/plugin-github-actions",
   "version": "0.0.1",
   "description": "Detector e integración con GitHub Actions / Check Runs",
   "license": "SEE LICENSE IN LICENSE",
@@ -15,8 +15,8 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@proof/plugin-sdk": "workspace:*",
-    "@proof/schema": "workspace:*"
+    "@cloudproof/plugin-sdk": "workspace:*",
+    "@cloudproof/schema": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

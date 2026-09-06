@@ -1,16 +1,16 @@
-# @proof/cli
+# @cloudproof/cli
 
-Interfaz determinista del Assurance Kernel. Proof expone evidencia para
+Interfaz determinista del Assurance Kernel. CloudProof expone evidencia para
 agentes, humanos y CI; no contiene un agente conversacional.
 
 | Comando | Comportamiento |
 |---|---|
-| `proof init` | detecta Node/Postgres/Prisma/Actions y genera config plano |
-| `proof doctor` | valida runtime, Docker, config, paths, workload, cobertura y approvals |
-| `proof release plan` | clasifica el diff estáticamente y devuelve `PLAN_ONLY_NOT_VERIFIED` + `nextCommand` |
-| `proof release verify` | ejecuta el proof y persiste el bundle en `.proof/` |
-| `proof reproduce <id>` | reconstruye el finding o reejecuta su etapa |
-| `proof mcp serve` | expone verify/evidencia por stdio |
+| `cloudproof init` | detecta Node/Postgres/Prisma/Actions y genera config plano |
+| `cloudproof doctor` | valida runtime, Docker, config, paths, workload, cobertura y approvals |
+| `cloudproof release plan` | clasifica el diff estáticamente y devuelve `PLAN_ONLY_NOT_VERIFIED` + `nextCommand` |
+| `cloudproof release verify` | ejecuta el cloudproof y persiste el bundle en `.cloudproof/` |
+| `cloudproof reproduce <id>` | reconstruye el finding o reejecuta su etapa |
+| `cloudproof mcp serve` | expone verify/evidencia por stdio |
 
 `release verify --json` emite un envelope versionado con bundle, violaciones y
 ruta persistida. En monorepos se exige `--service` cuando hay más de uno.
@@ -27,12 +27,12 @@ lógico del baseline, se exporta un snapshot SQL, se escribe un Compose y se
 reejecuta el exchange exacto. La app queda disponible para debug hasta:
 
 ```sh
-proof reproduce <id> --cleanup
+cloudproof reproduce <id> --cleanup
 ```
 
 Los fallos de etapa (`BUILD_A1`, migración, startup o efectos SQL) vuelven a
-ejecutar el proof y devuelven la assertion actual. IDs repetidos requieren
+ejecutar el cloudproof y devuelven la assertion actual. IDs repetidos requieren
 `--bundle`; CLI y MCP rechazan elegir uno arbitrariamente.
 
-`proof check` pertenece a Fase 2: la publicación real de GitHub Check Run no
+`cloudproof check` pertenece a Fase 2: la publicación real de GitHub Check Run no
 está implementada y falla explícitamente.

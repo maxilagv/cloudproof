@@ -1,5 +1,5 @@
 {
-  "name": "@proof/plugin-postgres",
+  "name": "@cloudproof/plugin-postgres",
   "version": "0.0.1",
   "description": "Detector y adaptador de PostgreSQL",
   "license": "SEE LICENSE IN LICENSE",
@@ -15,7 +15,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@proof/plugin-sdk": "workspace:*"
+    "@cloudproof/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

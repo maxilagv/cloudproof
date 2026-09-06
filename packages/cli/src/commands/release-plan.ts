@@ -5,12 +5,12 @@ import {
   type ExecutionProfile,
   type ProjectConfig,
   type ServiceConfig,
-} from "@proof/config";
+} from "@cloudproof/config";
 import {
   planRelease,
   type ReleaseTriagePlan,
   type TriageCommand,
-} from "@proof/postgres-verifier";
+} from "@cloudproof/postgres-verifier";
 import { paint, severityLabel } from "../ui.js";
 import { createWorktreeSnapshot } from "../worktree-snapshot.js";
 
@@ -44,12 +44,12 @@ function selectService(
   if (entries.length !== 1) {
     throw new Error(
       entries.length === 0
-        ? "proof.config.ts no declara servicios."
-        : "proof.config.ts declara mas de un servicio; elegi uno con --service <nombre>.",
+        ? "cloudproof.config.ts no declara servicios."
+        : "cloudproof.config.ts declara mas de un servicio; elegi uno con --service <nombre>.",
     );
   }
   const selected = entries[0];
-  if (selected === undefined) throw new Error("proof.config.ts no declara servicios.");
+  if (selected === undefined) throw new Error("cloudproof.config.ts no declara servicios.");
   return { name: selected[0], config: selected[1] };
 }
 

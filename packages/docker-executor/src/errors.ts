@@ -26,7 +26,7 @@ export function redactDiagnosticText(input: string): string {
 
 /**
  * Error con evidencia adjunta. Se redacta en la frontera para que stderr,
- * logs y SQLSTATE no filtren credenciales al Proof Bundle ni a la consola.
+ * logs y SQLSTATE no filtren credenciales al CloudProof Bundle ni a la consola.
  */
 export class ExecutorError extends Error {
   readonly evidence: string[];

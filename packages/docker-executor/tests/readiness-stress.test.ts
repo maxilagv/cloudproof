@@ -12,15 +12,15 @@ import { SpawnRunner, waitPostgresTcpReady } from "../dist/index.js";
  * Ninguna iteración tiene reintentos del lado del test: un solo fallo de
  * arranque es un fallo del suite.
  *
- * Gates: PROOF_DOCKER_IT=1 y PROOF_DOCKER_IT_STRESS=1.
- * PROOF_STRESS_BOOTS (default 20) controla las iteraciones; el workflow
- * nightly lo sube. PROOF_PG_IMAGE permite ejercer otras versiones
+ * Gates: CLOUDPROOF_DOCKER_IT=1 y CLOUDPROOF_DOCKER_IT_STRESS=1.
+ * CLOUDPROOF_STRESS_BOOTS (default 20) controla las iteraciones; el workflow
+ * nightly lo sube. CLOUDPROOF_PG_IMAGE permite ejercer otras versiones
  * (postgres:14-alpine … postgres:17-alpine).
  */
 const enabled =
-  process.env["PROOF_DOCKER_IT"] === "1" && process.env["PROOF_DOCKER_IT_STRESS"] === "1";
-const BOOTS = Number(process.env["PROOF_STRESS_BOOTS"] ?? "20");
-const IMAGE = process.env["PROOF_PG_IMAGE"] ?? "postgres:16-alpine";
+  process.env["CLOUDPROOF_DOCKER_IT"] === "1" && process.env["CLOUDPROOF_DOCKER_IT_STRESS"] === "1";
+const BOOTS = Number(process.env["CLOUDPROOF_STRESS_BOOTS"] ?? "20");
+const IMAGE = process.env["CLOUDPROOF_PG_IMAGE"] ?? "postgres:16-alpine";
 
 describe.skipIf(!enabled)(`estrés de readiness de Postgres (${IMAGE})`, () => {
   const runner = new SpawnRunner();
@@ -29,7 +29,7 @@ describe.skipIf(!enabled)(`estrés de readiness de Postgres (${IMAGE})`, () => {
     `${BOOTS} arranques consecutivos confirman readiness y aceptan un write inmediato`,
     async () => {
       for (let boot = 0; boot < BOOTS; boot += 1) {
-        const name = `proof-readiness-stress-${randomUUID().slice(0, 8)}`;
+        const name = `cloudproof-readiness-stress-${randomUUID().slice(0, 8)}`;
         const started = await runner.run(
           "docker",
           [
@@ -39,11 +39,11 @@ describe.skipIf(!enabled)(`estrés de readiness de Postgres (${IMAGE})`, () => {
             "--name",
             name,
             "-e",
-            "POSTGRES_USER=proof",
+            "POSTGRES_USER=cloudproof",
             "-e",
-            "POSTGRES_PASSWORD=proof",
+            "POSTGRES_PASSWORD=cloudproof",
             "-e",
-            "POSTGRES_DB=proof",
+            "POSTGRES_DB=cloudproof",
             IMAGE,
           ],
           { timeoutMs: 120_000 },
@@ -58,7 +58,7 @@ describe.skipIf(!enabled)(`estrés de readiness de Postgres (${IMAGE})`, () => {
           const write = await runner.run("docker", [
             "exec",
             "-e",
-            "PGPASSWORD=proof",
+            "PGPASSWORD=cloudproof",
             id,
             "psql",
             "-X",
@@ -67,9 +67,9 @@ describe.skipIf(!enabled)(`estrés de readiness de Postgres (${IMAGE})`, () => {
             "-h",
             "127.0.0.1",
             "-U",
-            "proof",
+            "cloudproof",
             "-d",
-            "proof",
+            "cloudproof",
             "-c",
             "CREATE TABLE stress_probe(id int); INSERT INTO stress_probe VALUES (1);",
           ]);

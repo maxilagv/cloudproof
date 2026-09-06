@@ -21,8 +21,8 @@ build/
 *.p12
 *.pfx
 
-# Runtime de Proof
-.proof/
+# Runtime de CloudProof
+.cloudproof/
 
 # Tests y cobertura
 coverage/

@@ -1,4 +1,4 @@
-# Changelog — @proof/schema
+# Changelog — @cloudproof/schema
 
 ## 0.0.1 (continuación — coverage del cambio y snapshots de desarrollo)
 
@@ -10,9 +10,9 @@
   sintético de worktree como `developmentOnly`, sin confundirlo con un commit
   publicado apto para gates de merge/deploy.
 
-## Proof Bundle v2 (adición compatible de lectura)
+## CloudProof Bundle v2 (adición compatible de lectura)
 
-- `ProofBundleSchema` lee v1 y v2; se exponen schemas y tipos explícitos para
+- `CloudProofBundleSchema` lee v1 y v2; se exponen schemas y tipos explícitos para
   cada versión.
 - V2 incorpora provenance verificable por digest, identidad del runner,
   repositorio/commits, perfil de ejecución y ventana temporal completa.
@@ -34,12 +34,12 @@
   - `AssertionSchema.remediation` (opcional): receta determinista
     expand/contract (`RemediationSchema`) con `pattern`, `strategy`,
     `steps[{order, phase, title, detail}]` y `triggeredBy` (tesis 7.6).
-  - `ProofBundleSchema.nextActions` (default `[]`): acciones tipadas
+  - `CloudProofBundleSchema.nextActions` (default `[]`): acciones tipadas
     (`NextActionSchema`) que hacen accionable todo veredicto no VERIFIED.
 
 ## 0.0.1
 
-- Scaffold inicial. `ProofBundleSchema` versión `"1"` (campo interno, no el version del paquete npm) según tesis sección 7.3.
+- Scaffold inicial. `CloudProofBundleSchema` versión `"1"` (campo interno, no el version del paquete npm) según tesis sección 7.3.
 - Cierre técnico de Fase 1: extensiones aditivas para servicio, estado de
   ejecución, approvals, contexto de reproducción, cobertura honesta y
   provenance de entorno. Los Bundles v1 anteriores siguen siendo válidos.

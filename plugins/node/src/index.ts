@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Detector, DetectionResult } from "@proof/plugin-sdk";
+import type { Detector, DetectionResult } from "@cloudproof/plugin-sdk";
 
 export const nodeDetector: Detector = {
   id: "node",

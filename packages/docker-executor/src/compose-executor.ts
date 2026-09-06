@@ -48,11 +48,11 @@ import {
  * Implementación real del DockerExecutor sobre la CLI de Docker.
  *
  * Nota sobre el nombre: la clase conserva el nombre ComposeExecutor del
- * scaffold (lo importan @proof/postgres-verifier y @proof/cli; renombrarla
+ * scaffold (lo importan @cloudproof/postgres-verifier y @cloudproof/cli; renombrarla
  * generaría churn cruzado mientras la Subfase 1.B avanza en paralelo),
  * pero la implementación actual orquesta contenedores individuales vía
  * `docker build/run/rm` directamente — más preciso para la matriz
- * A0/A1+S0/S1 que un archivo compose. `proof reproduce` genera además un
+ * A0/A1+S0/S1 que un archivo compose. `cloudproof reproduce` genera además un
  * Compose y snapshot local para la sesión interactiva.
  *
  * Decisiones de diseño (documentadas también en el README del paquete):
@@ -62,12 +62,12 @@ import {
  *  - Red bridge interna POR CORRIDA (sin egress, con DNS entre
  *    contenedores). Todos los puertos publicados se atan a 127.0.0.1.
  *  - Migraciones Prisma containerizadas con una imagen de migrador
- *    preconstruida durante la preparación. La ejecución del proof no
+ *    preconstruida durante la preparación. La ejecución del cloudproof no
  *    descarga dependencias ni depende del toolchain del host.
  *  - Asimetría deliberada de connectionUrl (ver types.ts): el de postgres
  *    es la URL de red interna (la consume la app contenedorizada); el de
  *    una app es la URL host 127.0.0.1 (la consume el Replayer del host).
- *  - Todo contenedor y red llevan labels dev.proof.owner / dev.proof.run:
+ *  - Todo contenedor y red llevan labels dev.cloudproof.owner / dev.cloudproof.run:
  *    disposeRun() barre la corrida actual y sweepAll() cualquier residuo
  *    de corridas anteriores, incluso tras un proceso matado a la mitad.
  */
@@ -99,7 +99,7 @@ export interface ComposeExecutorOptions {
   memoryLimit?: string;
   cpuLimit?: string;
   pidsLimit?: number;
-  /** Override tipado; si falta se usa PROOF_EXECUTION_PROFILE o trusted. */
+  /** Override tipado; si falta se usa CLOUDPROOF_EXECUTION_PROFILE o trusted. */
   executionProfile?: ExecutionProfile;
   /** Afirmacion explicita del operador; fork la exige. */
   ephemeralRunner?: boolean;
@@ -180,7 +180,7 @@ export class ComposeExecutor implements DockerExecutor {
         throw new ExecutorError(
           "El perfil fork solo puede ejecutarse en un runner efimero y sin secretos. " +
             "El operador debe aislar la maquina y declarar " +
-            "PROOF_EPHEMERAL_RUNNER=1 y PROOF_SECRETLESS_RUNNER=1.",
+            "CLOUDPROOF_EPHEMERAL_RUNNER=1 y CLOUDPROOF_SECRETLESS_RUNNER=1.",
         );
       }
     }
@@ -280,15 +280,15 @@ export class ComposeExecutor implements DockerExecutor {
   }
 
   private get runLabel(): string {
-    return `dev.proof.run=${this.runId}`;
+    return `dev.cloudproof.run=${this.runId}`;
   }
 
   private get networkName(): string {
-    return `proof-net-${this.runId}`;
+    return `cloudproof-net-${this.runId}`;
   }
 
   private get accessNetworkName(): string {
-    return `proof-access-${this.runId}`;
+    return `cloudproof-access-${this.runId}`;
   }
 
   // ---------------------------------------------------------------- build
@@ -323,7 +323,7 @@ export class ComposeExecutor implements DockerExecutor {
     // La identidad del tag incluye el contenido del Dockerfile y los build
     // args además de las rutas: si algo de eso cambió para el mismo SHA
     // (checkout no determinista, p.ej. una config de git distinta) el tag
-    // cambia y no se sirve una imagen stale. PROOF_FORCE_REBUILD=1 saltea
+    // cambia y no se sirve una imagen stale. CLOUDPROOF_FORCE_REBUILD=1 saltea
     // el cache por tag.
     const identity = createHash("sha256")
       .update(
@@ -345,9 +345,9 @@ export class ComposeExecutor implements DockerExecutor {
       )
       .digest("hex")
       .slice(0, 8);
-    const tag = `proof-app:${shaSegment}-${identity}`;
+    const tag = `cloudproof-app:${shaSegment}-${identity}`;
 
-    if (process.env["PROOF_FORCE_REBUILD"] !== "1") {
+    if (process.env["CLOUDPROOF_FORCE_REBUILD"] !== "1") {
       const cached = await this.docker(["image", "inspect", tag]);
       if (cached.exitCode === 0) {
         return tag;
@@ -402,7 +402,7 @@ export class ComposeExecutor implements DockerExecutor {
       if (cached.exitCode !== 0) {
         throw new ExecutorError(
           `El perfil fork no descargara la imagen externa ${source}. ` +
-            "Precargala por digest desde una fase confiable antes de ejecutar Proof.",
+            "Precargala por digest desde una fase confiable antes de ejecutar CloudProof.",
         );
       }
     }
@@ -450,7 +450,7 @@ export class ComposeExecutor implements DockerExecutor {
         throw new ExecutorError(
           `No se encontró Dockerfile ni en ${serviceRoot} ni en la raíz del worktree para el SHA ${spec.dockerfileFromSha ?? spec.sha}. ` +
             `Si el repo usa un nombre/ubicación no convencional (ej. docker/Dockerfile.web), ` +
-            `declaralo en services.<nombre>.dockerfile de proof.config.ts.${onboardingHint}`,
+            `declaralo en services.<nombre>.dockerfile de cloudproof.config.ts.${onboardingHint}`,
         );
       }
       this.assertRealPathInWorktree(dockerfileWorktree, dockerfile, "dockerfile");
@@ -542,7 +542,7 @@ export class ComposeExecutor implements DockerExecutor {
     await this.ensureNetwork();
     const postgresImage = await this.localImageReference(this.postgresImage, "postgresImage");
 
-    const name = `proof-pg-${spec.label.toLowerCase()}-${this.runId}-${randomUUID().slice(0, 4)}`;
+    const name = `cloudproof-pg-${spec.label.toLowerCase()}-${this.runId}-${randomUUID().slice(0, 4)}`;
     const run = await this.dockerOk(
       [
         "run",
@@ -575,11 +575,11 @@ export class ComposeExecutor implements DockerExecutor {
         ]),
         ...(this.blockEgress ? [] : ["-p", "127.0.0.1:0:5432"]),
         "-e",
-        "POSTGRES_USER=proof",
+        "POSTGRES_USER=cloudproof",
         "-e",
-        "POSTGRES_PASSWORD=proof",
+        "POSTGRES_PASSWORD=cloudproof",
         "-e",
-        "POSTGRES_DB=proof",
+        "POSTGRES_DB=cloudproof",
         postgresImage,
       ],
       `docker run de Postgres efímero (${spec.label})`,
@@ -592,6 +592,19 @@ export class ComposeExecutor implements DockerExecutor {
       if (spec.cloneFromContainerId !== undefined) {
         await this.restorePostgresClone(spec.cloneFromContainerId, id);
       }
+      // Schema baseline (informe Lubrisur 2026-07, 2ª ronda): génesis del
+      // seed ANTES de migrate deploy — con `_prisma_migrations` restaurada,
+      // Prisma aplica solo las migraciones pendientes, como en producción.
+      // Solo en bases NO clonadas: los clones lo heredan del origen.
+      if (spec.schemaBaselineSql !== undefined && spec.cloneFromContainerId === undefined) {
+        await this.applySqlFile(id, spec.schemaBaselineSql, {
+          source: "data.schemaBaseline",
+          context: `schema baseline (${spec.label}) antes de migrate deploy`,
+          // Un dump de schema real puede superar con holgura los 5 MiB del
+          // bootstrap de identidad; el límite evita dumps con datos masivos.
+          maxBytes: 64 * 1024 * 1024,
+        });
+      }
       await this.applyMigrations(
         spec.migrationsUpToSha,
         name,
@@ -601,14 +614,18 @@ export class ComposeExecutor implements DockerExecutor {
       // Bootstrap de identidad/datos de referencia: solo en bases NO
       // clonadas — los clones ya lo heredan del origen (S0 seed).
       if (spec.bootstrapSql !== undefined && spec.cloneFromContainerId === undefined) {
-        await this.applyBootstrapSql(id, spec.label, spec.bootstrapSql);
+        await this.applySqlFile(id, spec.bootstrapSql, {
+          source: "fixtures.bootstrapSql",
+          context: `bootstrap SQL (${spec.label}) tras migrate deploy`,
+          maxBytes: 5 * 1024 * 1024,
+        });
       }
 
       return {
         id,
         serviceName: name,
-        connectionUrl: `postgresql://proof:proof@${name}:5432/proof`,
-        hostConnectionUrl: `postgresql://proof:proof@127.0.0.1:${hostPort}/proof`,
+        connectionUrl: `postgresql://cloudproof:cloudproof@${name}:5432/cloudproof`,
+        hostConnectionUrl: `postgresql://cloudproof:cloudproof@127.0.0.1:${hostPort}/cloudproof`,
         containerPort: 5432,
       };
     } catch (error) {
@@ -640,40 +657,42 @@ export class ComposeExecutor implements DockerExecutor {
   }
 
   /**
-   * Aplica el bootstrap SQL declarado en fixtures.bootstrapSql dentro del
-   * contenedor (informe Bs As Neumáticos 2026-07: sin signup público no
-   * había forma legítima de crear la identidad inicial). Corre después de
-   * `migrate deploy` y antes de que arranque cualquier app: es preparación
-   * de entorno, análoga a una migración — la regla "las escrituras del
-   * workload son HTTP observables" no se toca. ON_ERROR_STOP: un bootstrap
-   * a medias no es un entorno válido.
+   * Aplica un archivo SQL del host dentro del contenedor Postgres con
+   * ON_ERROR_STOP (un SQL a medias no es un entorno válido). Dos usos:
+   *  - fixtures.bootstrapSql (informe Bs As Neumáticos 2026-07): identidad y
+   *    datos de referencia DESPUÉS de `migrate deploy` — preparación de
+   *    entorno, la regla "las escrituras del workload son HTTP observables"
+   *    no se toca.
+   *  - data.schemaBaseline (informe Lubrisur 2026-07, 2ª ronda): dump de la
+   *    base desplegada ANTES de `migrate deploy`, génesis del seed para
+   *    historias de migraciones irreplayables desde cero.
    */
-  private async applyBootstrapSql(
+  private async applySqlFile(
     containerId: string,
-    label: string,
     hostPath: string,
+    options: { source: string; context: string; maxBytes: number },
   ): Promise<void> {
     let contents: Buffer;
     try {
       contents = readFileSync(hostPath);
     } catch {
       throw new ExecutorError(
-        `fixtures.bootstrapSql no pudo leerse desde el host: ${hostPath}`,
+        `${options.source} no pudo leerse desde el host: ${hostPath}`,
       );
     }
-    if (contents.byteLength === 0 || contents.byteLength > 5 * 1024 * 1024) {
+    if (contents.byteLength === 0 || contents.byteLength > options.maxBytes) {
       throw new ExecutorError(
-        `fixtures.bootstrapSql debe tener entre 1 byte y 5 MiB (tiene ${contents.byteLength}).`,
+        `${options.source} debe tener entre 1 byte y ${options.maxBytes} bytes (tiene ${contents.byteLength}).`,
       );
     }
     if (contents.includes(0)) {
-      throw new ExecutorError("fixtures.bootstrapSql parece binario; se espera SQL en texto plano.");
+      throw new ExecutorError(`${options.source} parece binario; se espera SQL en texto plano.`);
     }
-    const containerPath = `/tmp/proof-bootstrap-${randomUUID().slice(0, 8)}.sql`;
+    const containerPath = `/tmp/cloudproof-sql-${randomUUID().slice(0, 8)}.sql`;
     try {
       await this.dockerOk(
         ["cp", hostPath, `${containerId}:${containerPath}`],
-        `copia del bootstrap SQL hacia ${label}`,
+        `copia de ${options.source} hacia el contenedor`,
       );
       await this.dockerOk(
         [
@@ -683,13 +702,13 @@ export class ComposeExecutor implements DockerExecutor {
           "-v",
           "ON_ERROR_STOP=1",
           "-U",
-          "proof",
+          "cloudproof",
           "-d",
-          "proof",
+          "cloudproof",
           "-f",
           containerPath,
         ],
-        `bootstrap SQL (${label}) tras migrate deploy`,
+        options.context,
         this.migrateTimeoutMs,
       );
     } finally {
@@ -698,10 +717,10 @@ export class ComposeExecutor implements DockerExecutor {
   }
 
   private async restorePostgresClone(sourceId: string, targetId: string): Promise<void> {
-    const temporaryDirectory = mkdtempSync(join(tmpdir(), "proof-pg-clone-"));
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), "cloudproof-pg-clone-"));
     const hostDump = join(temporaryDirectory, "s0.sql");
-    const sourceDump = `/tmp/proof-s0-${randomUUID().slice(0, 8)}.sql`;
-    const targetDump = `/tmp/proof-s0-${randomUUID().slice(0, 8)}.sql`;
+    const sourceDump = `/tmp/cloudproof-s0-${randomUUID().slice(0, 8)}.sql`;
+    const targetDump = `/tmp/cloudproof-s0-${randomUUID().slice(0, 8)}.sql`;
     try {
       // El dump del origen es de solo lectura: puede reintentarse ante un
       // transitorio. El restore sobre el destino NO (mutante): dockerOk.
@@ -711,9 +730,9 @@ export class ComposeExecutor implements DockerExecutor {
           sourceId,
           "pg_dump",
           "-U",
-          "proof",
+          "cloudproof",
           "-d",
-          "proof",
+          "cloudproof",
           "--no-owner",
           "--no-privileges",
           "-f",
@@ -739,9 +758,9 @@ export class ComposeExecutor implements DockerExecutor {
           "-v",
           "ON_ERROR_STOP=1",
           "-U",
-          "proof",
+          "cloudproof",
           "-d",
-          "proof",
+          "cloudproof",
           "-f",
           targetDump,
         ],
@@ -804,7 +823,7 @@ export class ComposeExecutor implements DockerExecutor {
    * ¿El repo usa Prisma "config-era"? Desde Prisma 7, `migrate deploy`
    * exige datasource.url vía archivo de config — y el prisma.config.* del
    * repo no puede ejecutarse dentro del migrador porque importa paquetes de
-   * un node_modules que no está montado. Proof monta entonces su propio
+   * un node_modules que no está montado. CloudProof monta entonces su propio
    * config sintético, drivado por variables de entorno.
    *
    * Señales (cualquiera activa el modo):
@@ -855,8 +874,8 @@ export class ComposeExecutor implements DockerExecutor {
     // Dos modos, decididos por evidencia del repo:
     //  - config-era (el repo tiene prisma.config.*): esas versiones exigen
     //    datasource.url vía config para migrate deploy. Se monta un config
-    //    SINTÉTICO de Proof junto al node_modules del migrador, drivado por
-    //    env vars (PROOF_PRISMA_SCHEMA / _MIGRATIONS / DATABASE_URL).
+    //    SINTÉTICO de CloudProof junto al node_modules del migrador, drivado por
+    //    env vars (CLOUDPROOF_PRISMA_SCHEMA / _MIGRATIONS / DATABASE_URL).
     //  - clásico: --schema explícito, sin config a la vista.
     const configMode = this.prismaConfigMode(
       prismaVersion,
@@ -865,7 +884,7 @@ export class ComposeExecutor implements DockerExecutor {
       servicePath,
     );
     const temporaryDirectory = configMode
-      ? mkdtempSync(join(tmpdir(), "proof-prisma-config-"))
+      ? mkdtempSync(join(tmpdir(), "cloudproof-prisma-config-"))
       : undefined;
     try {
       const modeArgs: string[] = [];
@@ -877,8 +896,8 @@ export class ComposeExecutor implements DockerExecutor {
             `import { defineConfig } from "prisma/config";`,
             ``,
             `export default defineConfig({`,
-            `  schema: process.env["PROOF_PRISMA_SCHEMA"],`,
-            `  migrations: { path: process.env["PROOF_PRISMA_MIGRATIONS"] },`,
+            `  schema: process.env["CLOUDPROOF_PRISMA_SCHEMA"],`,
+            `  migrations: { path: process.env["CLOUDPROOF_PRISMA_MIGRATIONS"] },`,
             `  datasource: { url: process.env["DATABASE_URL"] },`,
             `});`,
             ``,
@@ -887,11 +906,11 @@ export class ComposeExecutor implements DockerExecutor {
         );
         modeArgs.push(
           "-v",
-          `${configPath}:/opt/proof-migrator/prisma.config.ts:ro`,
+          `${configPath}:/opt/cloudproof-migrator/prisma.config.ts:ro`,
           "-e",
-          `PROOF_PRISMA_SCHEMA=${schema.container}`,
+          `CLOUDPROOF_PRISMA_SCHEMA=${schema.container}`,
           "-e",
-          `PROOF_PRISMA_MIGRATIONS=${schema.migrationsContainer}`,
+          `CLOUDPROOF_PRISMA_MIGRATIONS=${schema.migrationsContainer}`,
         );
       }
       await this.dockerOk(
@@ -908,9 +927,9 @@ export class ComposeExecutor implements DockerExecutor {
           "-v",
           `${worktree}:/repo:ro`,
           "-w",
-          "/opt/proof-migrator",
+          "/opt/cloudproof-migrator",
           "-e",
-          `DATABASE_URL=postgresql://proof:proof@${pgHost}:5432/proof`,
+          `DATABASE_URL=postgresql://cloudproof:cloudproof@${pgHost}:5432/cloudproof`,
           ...modeArgs,
           ...this.runtimeLimits(),
           ...this.droppedCapabilities(),
@@ -979,7 +998,7 @@ export class ComposeExecutor implements DockerExecutor {
    */
   private async ensureMigrationImage(version: string): Promise<string> {
     const identity = JSON.stringify({ recipe: "v2", base: this.migrationImage, prisma: version });
-    const tag = `proof-prisma-migrator:${createHash("sha256").update(identity).digest("hex").slice(0, 16)}`;
+    const tag = `cloudproof-prisma-migrator:${createHash("sha256").update(identity).digest("hex").slice(0, 16)}`;
     const cached = await this.docker(["image", "inspect", tag]);
     if (cached.exitCode === 0) return tag;
     if (this.executionProfile === "fork") {
@@ -989,7 +1008,7 @@ export class ComposeExecutor implements DockerExecutor {
       );
     }
 
-    const context = mkdtempSync(join(tmpdir(), "proof-prisma-image-"));
+    const context = mkdtempSync(join(tmpdir(), "cloudproof-prisma-image-"));
     try {
       writeFileSync(
         join(context, "package.json"),
@@ -1000,10 +1019,10 @@ export class ComposeExecutor implements DockerExecutor {
         join(context, "Dockerfile"),
         [
           `FROM ${this.migrationImage}`,
-          "WORKDIR /opt/proof-migrator",
+          "WORKDIR /opt/cloudproof-migrator",
           "COPY package.json ./",
           "RUN npm install --omit=dev --no-audit --no-fund",
-          'ENTRYPOINT ["/opt/proof-migrator/node_modules/.bin/prisma"]',
+          'ENTRYPOINT ["/opt/cloudproof-migrator/node_modules/.bin/prisma"]',
           "",
         ].join("\n"),
         "utf-8",
@@ -1033,7 +1052,7 @@ export class ComposeExecutor implements DockerExecutor {
   async startApp(imageTag: string, env: Record<string, string>): Promise<RunningContainer> {
     await this.ensureNetwork();
     assertSafeImageReference(imageTag, "imageTag");
-    assertValidEnvironment(env, this.executionProfile, { allowProofDatabaseUrl: true });
+    assertValidEnvironment(env, this.executionProfile, { allowCloudProofDatabaseUrl: true });
     for (const [name, value] of Object.entries(env)) {
       if (value.length >= 4 && (isSensitiveName(name) || looksSensitiveValue(value))) {
         this.sensitiveValues.add(value);
@@ -1047,12 +1066,12 @@ export class ComposeExecutor implements DockerExecutor {
     if (!Number.isSafeInteger(numericPort) || numericPort < 1 || numericPort > 65_535) {
       throw new ExecutorError(`PORT invalido para ${imageTag}: "${port}".`);
     }
-    const name = `proof-app-${this.appCounter++}-${this.runId}`;
+    const name = `cloudproof-app-${this.appCounter++}-${this.runId}`;
 
     // --env-file evita exponer valores en argv/listados de procesos. El
     // archivo tiene permisos 0600 y se elimina inmediatamente despues de que
     // Docker crea el contenedor (Docker ya copio su contenido al config).
-    const envDirectory = mkdtempSync(join(tmpdir(), "proof-app-env-"));
+    const envDirectory = mkdtempSync(join(tmpdir(), "cloudproof-app-env-"));
     const envPath = join(envDirectory, "runtime.env");
     writeFileSync(
       envPath,
@@ -1128,9 +1147,9 @@ export class ComposeExecutor implements DockerExecutor {
         "-v",
         "ON_ERROR_STOP=1",
         "-U",
-        "proof",
+        "cloudproof",
         "-d",
-        "proof",
+        "cloudproof",
         "-c",
         "SELECT pg_stat_force_next_flush();",
       ],
@@ -1147,9 +1166,9 @@ export class ComposeExecutor implements DockerExecutor {
         "-F",
         "\t",
         "-U",
-        "proof",
+        "cloudproof",
         "-d",
-        "proof",
+        "cloudproof",
         "-c",
         "SELECT schemaname || '.' || relname, n_tup_ins, n_tup_upd, n_tup_del " +
           "FROM pg_stat_user_tables " +
@@ -1264,9 +1283,9 @@ FROM objects;`;
         "-v",
         "ON_ERROR_STOP=1",
         "-U",
-        "proof",
+        "cloudproof",
         "-d",
-        "proof",
+        "cloudproof",
         "-c",
         sql,
       ],
@@ -1282,7 +1301,7 @@ FROM objects;`;
 
   async exportPostgres(containerId: string, destinationPath: string): Promise<void> {
     mkdirSync(dirname(destinationPath), { recursive: true });
-    const containerDump = `/tmp/proof-export-${randomUUID().slice(0, 8)}.sql`;
+    const containerDump = `/tmp/cloudproof-export-${randomUUID().slice(0, 8)}.sql`;
     try {
       await this.dockerOkReadRetry(
         [
@@ -1290,9 +1309,9 @@ FROM objects;`;
           containerId,
           "pg_dump",
           "-U",
-          "proof",
+          "cloudproof",
           "-d",
-          "proof",
+          "cloudproof",
           "--no-owner",
           "--no-privileges",
           "--clean",
@@ -1397,8 +1416,8 @@ FROM objects;`;
   }
 
   /**
-   * Barrido global: elimina CUALQUIER contenedor/red creado por proof
-   * (label dev.proof.owner), incluso de corridas anteriores muertas a la
+   * Barrido global: elimina CUALQUIER contenedor/red creado por cloudproof
+   * (label dev.cloudproof.owner), incluso de corridas anteriores muertas a la
    * mitad. Es la garantía de "cero residuos" de la Subfase 1.A.
    */
   static async sweepAll(
@@ -1462,7 +1481,7 @@ FROM objects;`;
     if (!this.blockEgress) return this.mappedPort(targetId, `${targetPort}/tcp`);
 
     await this.ensureAccessNetwork();
-    const proxyName = `proof-port-${this.proxyCounter++}-${this.runId}`;
+    const proxyName = `cloudproof-port-${this.proxyCounter++}-${this.runId}`;
     const proxyScript =
       'const net=require("node:net");' +
       'const host=process.env.TARGET_HOST,port=Number(process.env.TARGET_PORT);' +
@@ -1588,7 +1607,7 @@ FROM objects;`;
    * (sondas, fingerprints, dumps). Reintenta únicamente errores transitorios
    * conocidos de conexión/arranque de Postgres; cualquier error SQL real
    * (constraint, columna inexistente, permiso) se propaga al PRIMER intento:
-   * esa evidencia es la razón de ser de Proof y jamás se reintenta. Las
+   * esa evidencia es la razón de ser de CloudProof y jamás se reintenta. Las
    * operaciones que MUTAN estado (migraciones, restore, workload) usan
    * dockerOk directo — reintentar tras una aplicación parcial mentiría.
    */
@@ -1827,7 +1846,7 @@ export function assertSafeForkDockerfile(dockerfileContents: string): void {
 
 /**
  * Imagenes externas referenciadas por FROM o COPY --from. Los aliases de
- * stages se excluyen. Una variable en esa posicion se rechaza: Proof no puede
+ * stages se excluyen. Una variable en esa posicion se rechaza: CloudProof no puede
  * demostrar offline que valor tomara.
  */
 export function dockerfileExternalImages(dockerfileContents: string): string[] {

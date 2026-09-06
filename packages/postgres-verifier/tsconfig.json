@@ -6,7 +6,7 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../proof-schema" },
+    { "path": "../cloudproof-schema" },
     { "path": "../docker-executor" },
     { "path": "../http-recorder" }
   ]

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { generatedSegmentOf, type Detector, type DetectionResult } from "@proof/plugin-sdk";
+import { generatedSegmentOf, type Detector, type DetectionResult } from "@cloudproof/plugin-sdk";
 
 export const postgresDetector: Detector = {
   id: "postgres",

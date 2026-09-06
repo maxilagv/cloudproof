@@ -3,8 +3,8 @@ import { collectResidues, sweepResidues } from "../dist/index.js";
 import { FakeRunner, type Responder } from "./fake-runner.js";
 
 /**
- * `proof cleanup` (P0 informe 2026-07-18) se apoya en este módulo: el
- * contrato es listar SOLO recursos con label dev.proof.owner, no eliminar
+ * `cloudproof cleanup` (P0 informe 2026-07-18) se apoya en este módulo: el
+ * contrato es listar SOLO recursos con label dev.cloudproof.owner, no eliminar
  * nada bajo dry-run, y que un recurso ya desaparecido no cuente como fallo.
  */
 
@@ -14,29 +14,29 @@ const listing: Responder = (command, args) => {
   if (line.startsWith("ps -a")) {
     return {
       stdout:
-        "aaa111\tproof-pg-s0-run1\trun1\n" +
-        "bbb222\tproof-app-0-run2\trun2\n" +
-        "ccc333\tproof-legacy\t\n",
+        "aaa111\tcloudproof-pg-s0-run1\trun1\n" +
+        "bbb222\tcloudproof-app-0-run2\trun2\n" +
+        "ccc333\tcloudproof-legacy\t\n",
     };
   }
   if (line.startsWith("network ls")) {
-    return { stdout: "ddd444\tproof-net-run1\trun1\n" };
+    return { stdout: "ddd444\tcloudproof-net-run1\trun1\n" };
   }
   return undefined;
 };
 
 describe("collectResidues", () => {
-  it("lista contenedores y redes con label de Proof, con runId opcional", async () => {
+  it("lista contenedores y redes con label de CloudProof, con runId opcional", async () => {
     const runner = new FakeRunner(listing);
     const report = await collectResidues(runner);
 
     expect(report.containers).toEqual([
-      { id: "aaa111", name: "proof-pg-s0-run1", runId: "run1" },
-      { id: "bbb222", name: "proof-app-0-run2", runId: "run2" },
-      { id: "ccc333", name: "proof-legacy" },
+      { id: "aaa111", name: "cloudproof-pg-s0-run1", runId: "run1" },
+      { id: "bbb222", name: "cloudproof-app-0-run2", runId: "run2" },
+      { id: "ccc333", name: "cloudproof-legacy" },
     ]);
-    expect(report.networks).toEqual([{ id: "ddd444", name: "proof-net-run1", runId: "run1" }]);
-    expect(runner.count("--filter label=dev.proof.owner=proof")).toBe(2);
+    expect(report.networks).toEqual([{ id: "ddd444", name: "cloudproof-net-run1", runId: "run1" }]);
+    expect(runner.count("--filter label=dev.cloudproof.owner=cloudproof")).toBe(2);
   });
 
   it("falla con evidencia si el daemon no responde", async () => {
@@ -71,7 +71,7 @@ describe("sweepResidues", () => {
     expect(report.removed).toBe(true);
     // El "no such container" no es fallo: alguien lo eliminó entre listado y rm.
     expect(report.failures).toEqual([
-      "contenedor proof-app-0-run2: device or resource busy",
+      "contenedor cloudproof-app-0-run2: device or resource busy",
     ]);
     expect(runner.count("rm -f")).toBe(3);
     expect(runner.count("network rm ddd444")).toBe(1);

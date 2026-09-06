@@ -16,16 +16,16 @@ export function resolveHttpExecutionProfile(
   override?: HttpExecutionProfile,
   env: NodeJS.ProcessEnv = process.env,
 ): HttpExecutionProfile {
-  const raw = env["PROOF_EXECUTION_PROFILE"];
-  const lockRaw = env["PROOF_EXECUTION_PROFILE_LOCKED"];
+  const raw = env["CLOUDPROOF_EXECUTION_PROFILE"];
+  const lockRaw = env["CLOUDPROOF_EXECUTION_PROFILE_LOCKED"];
   const selected =
     override ??
     (raw === undefined || raw.trim() === ""
       ? "trusted"
-      : parseProfile(raw, "PROOF_EXECUTION_PROFILE"));
+      : parseProfile(raw, "CLOUDPROOF_EXECUTION_PROFILE"));
   const explicitlySelected = override !== undefined || (raw !== undefined && raw.trim() !== "");
   if (lockRaw === undefined || lockRaw.trim() === "") return selected;
-  const locked = parseProfile(lockRaw, "PROOF_EXECUTION_PROFILE_LOCKED");
+  const locked = parseProfile(lockRaw, "CLOUDPROOF_EXECUTION_PROFILE_LOCKED");
   if (explicitlySelected && RANK[selected] < RANK[locked]) {
     throw new TypeError(`Execution profile downgrade ${locked} -> ${selected} was rejected`);
   }

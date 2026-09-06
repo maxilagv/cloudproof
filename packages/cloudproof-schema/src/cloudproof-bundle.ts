@@ -7,21 +7,21 @@ import { NextActionSchema } from "./next-action.js";
 import { RemediationSchema } from "./remediation.js";
 
 /**
- * Proof Bundle is a versioned wire contract. V1 remains readable as-is; V2 is
+ * CloudProof Bundle is a versioned wire contract. V1 remains readable as-is; V2 is
  * deliberately strict and carries the information needed to decide whether
  * evidence is attributable, sanitized, current and structurally attested.
  *
  * IMPORTANT: parsing an attestation proves only that its envelope is well
  * formed. Authenticity requires a trust policy and cryptographic verification
- * performed by a consumer (see `PROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT`).
+ * performed by a consumer (see `CLOUDPROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT`).
  */
 
 const SHORT_TEXT_MAX = 2_048;
 const LONG_TEXT_MAX = 16_384;
 const MAX_ASSERTIONS = 1_000;
 const MAX_EVIDENCE_REFS = 2_000;
-export const MAX_PROOF_BUNDLE_JSON_BYTES = 8 * 1024 * 1024;
-export const MAX_PROOF_BUNDLE_VALIDITY_MS = 24 * 60 * 60 * 1_000;
+export const MAX_CLOUDPROOF_BUNDLE_JSON_BYTES = 8 * 1024 * 1024;
+export const MAX_CLOUDPROOF_BUNDLE_VALIDITY_MS = 24 * 60 * 60 * 1_000;
 
 const NonEmptyTextSchema = z.string().trim().min(1).max(SHORT_TEXT_MAX);
 const LongTextSchema = z.string().trim().min(1).max(LONG_TEXT_MAX);
@@ -83,7 +83,7 @@ const RecordedResponseSchema = z.object({
 });
 
 export const ReproductionContextSchema = z.object({
-  kind: z.enum(["live-state", "rerun-proof"]),
+  kind: z.enum(["live-state", "rerun-cloudproof"]),
   state: ExecutionStateSchema,
   exchange: z
     .object({
@@ -208,7 +208,7 @@ export const ProvenanceV1Schema = z.object({
 /** Historical export retained for current producers. */
 export const ProvenanceSchema = ProvenanceV1Schema;
 
-export const ProofBundleV1Schema = z.object({
+export const CloudProofBundleV1Schema = z.object({
   version: z.literal("1"),
   subject: z.object({
     baseSha: z.string(),
@@ -266,7 +266,7 @@ export const EvidenceReferenceV2Schema = z
       .min(3)
       .max(2_048)
       .regex(
-        /^(?:https|s3|gs|az|oci|proof|urn):/,
+        /^(?:https|s3|gs|az|oci|cloudproof|urn):/,
         "Evidence URI must use an approved non-executable scheme",
       ),
     mediaType: z.string().min(1).max(256),
@@ -504,7 +504,7 @@ const ApprovalLinkV2Schema = z
  */
 export const ReproductionContextV2Schema = z
   .object({
-    kind: z.enum(["live-state", "rerun-proof"]),
+    kind: z.enum(["live-state", "rerun-cloudproof"]),
     state: ExecutionStateSchema,
     evidenceRef: IdentifierSchema,
     exchange: z.never().optional(),
@@ -594,7 +594,7 @@ export const ReleaseMatrixV2Schema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["entries"],
-        message: "A complete matrix must contain every Proof v2 execution state",
+        message: "A complete matrix must contain every CloudProof v2 execution state",
       });
     }
     if (value.completeness === "complete" && value.entries.some((entry) => !entry.required)) {
@@ -637,7 +637,7 @@ const DsseSignatureV2Schema = z
 
 const AttestationBaseShape = {
   id: IdentifierSchema,
-  predicateType: z.literal("https://proof.dev/attestations/release/v2"),
+  predicateType: z.literal("https://cloudproof.dev/attestations/release/v2"),
   payloadDigest: ContentDigestSchema,
   issuedAt: TimestampSchema,
 };
@@ -649,7 +649,7 @@ export const DsseAttestationV2Schema = z
     /** The nested object is an exact DSSE envelope. */
     envelope: z
       .object({
-        payloadType: z.literal("application/vnd.proof.bundle.v2+json"),
+        payloadType: z.literal("application/vnd.cloudproof.bundle.v2+json"),
         payload: z
           .string()
           .min(4)
@@ -668,7 +668,7 @@ export const DetachedAttestationV2Schema = z
   .object({
     ...AttestationBaseShape,
     kind: z.literal("detached"),
-    statementType: z.literal("application/vnd.proof.bundle.v2+json"),
+    statementType: z.literal("application/vnd.cloudproof.bundle.v2+json"),
     signatureInput: z.literal("canonical-payload"),
     signatures: z.array(SignatureV2Schema).min(1).max(20),
   })
@@ -679,21 +679,21 @@ export const AttestationV2Schema = z.discriminatedUnion("kind", [
   DetachedAttestationV2Schema,
 ]);
 
-export const PROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT =
-  "proof-bundle/v2-rfc8785-jcs-v1; exclude=integrity,attestations; digest=algorithm-prefixed" as const;
-export const PROOF_BUNDLE_V2_PREDICATE_TYPE =
-  "https://proof.dev/attestations/release/v2" as const;
-export const PROOF_BUNDLE_V2_DSSE_PAYLOAD_TYPE =
-  "application/vnd.proof.bundle.v2+json" as const;
+export const CLOUDPROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT =
+  "cloudproof-bundle/v2-rfc8785-jcs-v1; exclude=integrity,attestations; digest=algorithm-prefixed" as const;
+export const CLOUDPROOF_BUNDLE_V2_PREDICATE_TYPE =
+  "https://cloudproof.dev/attestations/release/v2" as const;
+export const CLOUDPROOF_BUNDLE_V2_DSSE_PAYLOAD_TYPE =
+  "application/vnd.cloudproof.bundle.v2+json" as const;
 
 const IntegrityV2Schema = z
   .object({
-    canonicalization: z.literal(PROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT),
+    canonicalization: z.literal(CLOUDPROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT),
     payloadDigest: ContentDigestSchema,
   })
   .strict();
 
-const ProofBundleV2ObjectSchema = z
+const CloudProofBundleV2ObjectSchema = z
   .object({
     version: z.literal("2"),
     subject: z
@@ -753,17 +753,17 @@ function narrativeContainsSensitiveValue(value: unknown): boolean {
   return false;
 }
 
-export const ProofBundleV2Schema = ProofBundleV2ObjectSchema.superRefine((bundle, context) => {
+export const CloudProofBundleV2Schema = CloudProofBundleV2ObjectSchema.superRefine((bundle, context) => {
   const issuedAt = Date.parse(bundle.issuedAt);
   const expiresAt = Date.parse(bundle.expiresAt);
   const startedAt = Date.parse(bundle.provenance.execution.startedAt);
   const finishedAt = Date.parse(bundle.provenance.execution.finishedAt);
 
-  if (Buffer.byteLength(JSON.stringify(bundle), "utf8") > MAX_PROOF_BUNDLE_JSON_BYTES) {
+  if (Buffer.byteLength(JSON.stringify(bundle), "utf8") > MAX_CLOUDPROOF_BUNDLE_JSON_BYTES) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: [],
-      message: `Serialized Proof Bundle exceeds ${MAX_PROOF_BUNDLE_JSON_BYTES} bytes`,
+      message: `Serialized CloudProof Bundle exceeds ${MAX_CLOUDPROOF_BUNDLE_JSON_BYTES} bytes`,
     });
   }
 
@@ -786,7 +786,7 @@ export const ProofBundleV2Schema = ProofBundleV2ObjectSchema.superRefine((bundle
       message: "Bundle expiration must be later than issuance",
     });
   }
-  if (expiresAt - issuedAt > MAX_PROOF_BUNDLE_VALIDITY_MS) {
+  if (expiresAt - issuedAt > MAX_CLOUDPROOF_BUNDLE_VALIDITY_MS) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["expiresAt"],
@@ -955,7 +955,7 @@ export const ProofBundleV2Schema = ProofBundleV2ObjectSchema.superRefine((bundle
   let canonicalPayload: string | undefined;
   let computedPayloadDigest: string | undefined;
   try {
-    canonicalPayload = createProofBundleV2AttestationPayload(bundle);
+    canonicalPayload = createCloudProofBundleV2AttestationPayload(bundle);
     computedPayloadDigest = digestForContract(canonicalPayload, bundle.integrity.payloadDigest);
   } catch (error) {
     context.addIssue({
@@ -1288,7 +1288,7 @@ export const ProofBundleV2Schema = ProofBundleV2ObjectSchema.superRefine((bundle
 });
 
 /** Reads both wire versions. Producers should select an explicit version schema. */
-export const ProofBundleSchema = z.union([ProofBundleV2Schema, ProofBundleV1Schema]);
+export const CloudProofBundleSchema = z.union([CloudProofBundleV2Schema, CloudProofBundleV1Schema]);
 
 export type AssertionV1 = z.infer<typeof AssertionV1Schema>;
 export type AssertionV2 = z.infer<typeof AssertionV2Schema>;
@@ -1297,11 +1297,11 @@ export type Coverage = z.infer<typeof CoverageSchema>;
 export type ProvenanceV1 = z.infer<typeof ProvenanceV1Schema>;
 export type ProvenanceV2 = z.infer<typeof ProvenanceV2Schema>;
 export type Provenance = ProvenanceV1 | ProvenanceV2;
-export type ProofBundleV1 = z.infer<typeof ProofBundleV1Schema>;
-export type ProofBundleV2 = z.infer<typeof ProofBundleV2Schema>;
-export type ProofBundleV1Input = z.input<typeof ProofBundleV1Schema>;
-export type ProofBundleV2Input = z.input<typeof ProofBundleV2Schema>;
-export type ProofBundle = ProofBundleV1 | ProofBundleV2;
+export type CloudProofBundleV1 = z.infer<typeof CloudProofBundleV1Schema>;
+export type CloudProofBundleV2 = z.infer<typeof CloudProofBundleV2Schema>;
+export type CloudProofBundleV1Input = z.input<typeof CloudProofBundleV1Schema>;
+export type CloudProofBundleV2Input = z.input<typeof CloudProofBundleV2Schema>;
+export type CloudProofBundle = CloudProofBundleV1 | CloudProofBundleV2;
 export type ExecutionState = z.infer<typeof ExecutionStateSchema>;
 export type Approval = z.infer<typeof ApprovalSchema>;
 export type ApprovalV2 = z.infer<typeof ApprovalV2Schema>;
@@ -1309,13 +1309,13 @@ export type EvidenceReferenceV2 = z.infer<typeof EvidenceReferenceV2Schema>;
 export type AttestationV2 = z.infer<typeof AttestationV2Schema>;
 export type ReproductionContext = z.infer<typeof ReproductionContextSchema>;
 export type ReproductionContextV2 = z.infer<typeof ReproductionContextV2Schema>;
-export type ProofBundleFreshness = "not-yet-valid" | "fresh" | "expired";
+export type CloudProofBundleFreshness = "not-yet-valid" | "fresh" | "expired";
 
 /** Pure, deterministic freshness decision. Equality with expiresAt is expired. */
-export function getProofBundleFreshness(
-  bundle: Pick<ProofBundleV2, "issuedAt" | "expiresAt">,
+export function getCloudProofBundleFreshness(
+  bundle: Pick<CloudProofBundleV2, "issuedAt" | "expiresAt">,
   now: Date | string | number = new Date(),
-): ProofBundleFreshness {
+): CloudProofBundleFreshness {
   const instant = now instanceof Date ? now.getTime() : new Date(now).getTime();
   if (!Number.isFinite(instant)) throw new TypeError("Invalid freshness comparison instant");
   if (instant < Date.parse(bundle.issuedAt)) return "not-yet-valid";
@@ -1370,62 +1370,62 @@ function digestForContract(payload: string, declaredDigest: string): string {
  * nothing and verifies no signature; callers must use the algorithm named by
  * `integrity.payloadDigest` and apply their own trust-root policy.
  */
-export type ProofBundleV2AttestationPayloadInput =
-  | ProofBundleV2
-  | Omit<ProofBundleV2, "integrity" | "attestations">;
+export type CloudProofBundleV2AttestationPayloadInput =
+  | CloudProofBundleV2
+  | Omit<CloudProofBundleV2, "integrity" | "attestations">;
 
-export function createProofBundleV2AttestationPayload(
-  bundle: ProofBundleV2AttestationPayloadInput,
+export function createCloudProofBundleV2AttestationPayload(
+  bundle: CloudProofBundleV2AttestationPayloadInput,
 ): string {
-  const { integrity: _integrity, attestations: _attestations, ...payload } = bundle as ProofBundleV2;
+  const { integrity: _integrity, attestations: _attestations, ...payload } = bundle as CloudProofBundleV2;
   void _integrity;
   void _attestations;
   return canonicalJson(payload as unknown as CanonicalJson);
 }
 
-export const PROOF_BUNDLE_V1_DSSE_PAYLOAD_TYPE =
-  "application/vnd.proof.bundle.v1+json" as const;
+export const CLOUDPROOF_BUNDLE_V1_DSSE_PAYLOAD_TYPE =
+  "application/vnd.cloudproof.bundle.v1+json" as const;
 
 /**
  * Payload canónico de firma para cualquier versión del Bundle (gate 3 del
  * informe 2026-07-18). V2 excluye `integrity`/`attestations` (contrato
- * PROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT); V1 no tiene envelope de
+ * CLOUDPROOF_BUNDLE_V2_ATTESTATION_PAYLOAD_CONTRACT); V1 no tiene envelope de
  * integridad, así que el payload es el Bundle completo en JSON canónico
  * RFC 8785. Esta función no hashea ni firma nada: produce los bytes exactos
  * que un firmante/verificador debe procesar.
  */
-export function createProofBundleSigningPayload(bundle: ProofBundle): {
+export function createCloudProofBundleSigningPayload(bundle: CloudProofBundle): {
   payloadType:
-    | typeof PROOF_BUNDLE_V1_DSSE_PAYLOAD_TYPE
-    | typeof PROOF_BUNDLE_V2_DSSE_PAYLOAD_TYPE;
+    | typeof CLOUDPROOF_BUNDLE_V1_DSSE_PAYLOAD_TYPE
+    | typeof CLOUDPROOF_BUNDLE_V2_DSSE_PAYLOAD_TYPE;
   payload: string;
 } {
   if (bundle.version === "2") {
     return {
-      payloadType: PROOF_BUNDLE_V2_DSSE_PAYLOAD_TYPE,
-      payload: createProofBundleV2AttestationPayload(bundle),
+      payloadType: CLOUDPROOF_BUNDLE_V2_DSSE_PAYLOAD_TYPE,
+      payload: createCloudProofBundleV2AttestationPayload(bundle),
     };
   }
   return {
-    payloadType: PROOF_BUNDLE_V1_DSSE_PAYLOAD_TYPE,
+    payloadType: CLOUDPROOF_BUNDLE_V1_DSSE_PAYLOAD_TYPE,
     payload: canonicalJson(bundle as unknown as CanonicalJson),
   };
 }
 
 /** Computes the algorithm-qualified integrity digest expected by v2. */
-export function createProofBundleV2PayloadDigest(
-  bundle: ProofBundleV2AttestationPayloadInput,
+export function createCloudProofBundleV2PayloadDigest(
+  bundle: CloudProofBundleV2AttestationPayloadInput,
   algorithm: "sha256" | "sha512" = "sha256",
 ): string {
   return digestForContract(
-    createProofBundleV2AttestationPayload(bundle),
+    createCloudProofBundleV2AttestationPayload(bundle),
     `${algorithm}:${"0".repeat(algorithm === "sha256" ? 64 : 128)}`,
   );
 }
 
 /** Structural check after a caller independently hashes the canonical payload. */
 export function attestationPayloadDigestMatches(
-  bundle: ProofBundleV2,
+  bundle: CloudProofBundleV2,
   independentlyComputedDigest: string,
 ): boolean {
   return (
@@ -1438,22 +1438,22 @@ export function attestationPayloadDigestMatches(
 }
 
 /**
- * Bounded decoder for untrusted wire input. `ProofBundleSchema` remains a
+ * Bounded decoder for untrusted wire input. `CloudProofBundleSchema` remains a
  * historical reader; authorization gates must additionally require version 2,
  * freshness and cryptographic trust verification.
  */
-export function parseProofBundleJson(
+export function parseCloudProofBundleJson(
   input: string | Uint8Array,
-): ProofBundle {
+): CloudProofBundle {
   const bytes = typeof input === "string" ? Buffer.byteLength(input, "utf8") : input.byteLength;
-  if (bytes > MAX_PROOF_BUNDLE_JSON_BYTES) {
-    throw new RangeError(`Proof Bundle exceeds ${MAX_PROOF_BUNDLE_JSON_BYTES} bytes`);
+  if (bytes > MAX_CLOUDPROOF_BUNDLE_JSON_BYTES) {
+    throw new RangeError(`CloudProof Bundle exceeds ${MAX_CLOUDPROOF_BUNDLE_JSON_BYTES} bytes`);
   }
   const text = typeof input === "string" ? input : Buffer.from(input).toString("utf8");
-  return ProofBundleSchema.parse(JSON.parse(text) as unknown);
+  return CloudProofBundleSchema.parse(JSON.parse(text) as unknown);
 }
 
-export interface ProofBundleV2GatePolicy {
+export interface CloudProofBundleV2GatePolicy {
   now?: Date | string | number;
   /**
    * Must verify DSSE PAE/detached signatures, certificate chains, revocation,
@@ -1461,36 +1461,36 @@ export interface ProofBundleV2GatePolicy {
    * a substitute for this callback.
    */
   verifyAttestations: (
-    bundle: ProofBundleV2,
+    bundle: CloudProofBundleV2,
     canonicalPayload: string,
   ) => boolean | Promise<boolean>;
   /** Fetches/opens every non-blocked locator and verifies bytes against digest. */
-  verifyEvidence: (bundle: ProofBundleV2) => boolean | Promise<boolean>;
+  verifyEvidence: (bundle: CloudProofBundleV2) => boolean | Promise<boolean>;
 }
 
 /** Anti-downgrade, freshness and mandatory trust boundary for merge gates. */
-export async function evaluateProofBundleV2ForGate(
+export async function evaluateCloudProofBundleV2ForGate(
   input: unknown,
-  policy: ProofBundleV2GatePolicy,
-): Promise<ProofBundleV2> {
-  const bundle = ProofBundleV2Schema.parse(input);
+  policy: CloudProofBundleV2GatePolicy,
+): Promise<CloudProofBundleV2> {
+  const bundle = CloudProofBundleV2Schema.parse(input);
   if (bundle.conclusion !== "VERIFIED") {
-    throw new Error(`Proof Bundle conclusion is ${bundle.conclusion}, not VERIFIED`);
+    throw new Error(`CloudProof Bundle conclusion is ${bundle.conclusion}, not VERIFIED`);
   }
-  const freshness = getProofBundleFreshness(bundle, policy.now ?? new Date());
+  const freshness = getCloudProofBundleFreshness(bundle, policy.now ?? new Date());
   if (freshness !== "fresh") {
-    throw new Error(`Proof Bundle is ${freshness}; gate evidence must be fresh`);
+    throw new Error(`CloudProof Bundle is ${freshness}; gate evidence must be fresh`);
   }
   const trusted = await policy.verifyAttestations(
     bundle,
-    createProofBundleV2AttestationPayload(bundle),
+    createCloudProofBundleV2AttestationPayload(bundle),
   );
   if (!trusted) {
-    throw new Error("Proof Bundle attestations did not satisfy the gate trust policy");
+    throw new Error("CloudProof Bundle attestations did not satisfy the gate trust policy");
   }
   const evidenceVerified = await policy.verifyEvidence(bundle);
   if (!evidenceVerified) {
-    throw new Error("Proof Bundle evidence was unavailable or failed content-digest verification");
+    throw new Error("CloudProof Bundle evidence was unavailable or failed content-digest verification");
   }
   return bundle;
 }

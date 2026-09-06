@@ -1,4 +1,4 @@
-import { SpawnRunner, snapshotWorkingTree } from "@proof/docker-executor";
+import { SpawnRunner, snapshotWorkingTree } from "@cloudproof/docker-executor";
 
 export interface WorktreeSnapshot {
   headSha: string;

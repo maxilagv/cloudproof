@@ -148,7 +148,7 @@ def build_addendum() -> None:
         rightMargin=18 * mm, leftMargin=18 * mm,
         topMargin=21 * mm, bottomMargin=18 * mm,
         title="Tesis de Producto - Developer Reliability Platform v0.4",
-        author="Proof",
+        author="CloudProof",
     )
 
     story: list = []
@@ -189,7 +189,7 @@ def build_addendum() -> None:
         [
             "La seccion 16.3 fijo como objetivo de diseno 'falso positivo bloqueante &lt; 3%' y 'findings reproducibles "
             "&gt; 95%'. Comparado con el estado del arte de herramientas que dependen de heuristicas o de un modelo "
-            "probabilistico, es una meta razonable. Comparado con lo que Proof afirma ser, es un techo que contradice "
+            "probabilistico, es una meta razonable. Comparado con lo que CloudProof afirma ser, es un techo que contradice "
             "el propio posicionamiento del documento.",
             "El problema no es solo la magnitud. Un 3% de falso positivo bloqueante significa que uno de cada treinta "
             "y tres bloqueos es ruido. Ningun equipo deja un gate en modo Enforce con esa tasa: lo pasa a Observe, "
@@ -208,7 +208,7 @@ def build_addendum() -> None:
     story += section(
         "2. La asimetria fundamental: los errores no cuestan igual",
         [
-            "Proof puede equivocarse en dos direcciones y la tesis las trato hasta ahora como simetricas. No lo son, "
+            "CloudProof puede equivocarse en dos direcciones y la tesis las trato hasta ahora como simetricas. No lo son, "
             "y esa asimetria debe quedar escrita en el regimen de calidad porque determina cada decision de diseno "
             "posterior.",
         ],
@@ -218,22 +218,22 @@ def build_addendum() -> None:
         [cell("Error", styles["tablehead"]), cell("Que ocurre", styles["tablehead"]),
          cell("Costo", styles["tablehead"]), cell("Recuperabilidad", styles["tablehead"])],
         [cell("<b>Falso VERIFIED</b>", styles["table"]),
-         cell("Proof declara segura una transicion que rompe en produccion.", styles["table"]),
-         cell("Un incidente. Downtime, perdida de datos o corrupcion silenciosa. El costo no lo paga Proof: lo paga el usuario, y lo descubre tarde.", styles["table"]),
+         cell("CloudProof declara segura una transicion que rompe en produccion.", styles["table"]),
+         cell("Un incidente. Downtime, perdida de datos o corrupcion silenciosa. El costo no lo paga CloudProof: lo paga el usuario, y lo descubre tarde.", styles["table"]),
          cell("<b>Nula.</b> El dano ya ocurrio y la confianza en toda evidencia previa queda invalidada retroactivamente.", styles["table"])],
         [cell("<b>Falso UNSAFE</b>", styles["table"]),
-         cell("Proof bloquea un release que en realidad era seguro.", styles["table"]),
+         cell("CloudProof bloquea un release que en realidad era seguro.", styles["table"]),
          cell("Minutos de investigacion y un override. Friccion, no dano.", styles["table"]),
          cell("Total. El usuario inspecciona la evidencia, ve que no aplica y sigue.", styles["table"])],
         [cell("<b>INCONCLUSIVE</b>", styles["table"]),
-         cell("Proof no puede concluir y lo declara.", styles["table"]),
+         cell("CloudProof no puede concluir y lo declara.", styles["table"]),
          cell("El costo de la corrida. No es un error: es el comportamiento correcto ante evidencia insuficiente.", styles["table"]),
          cell("Total, y ademas informativa: dice que falta para concluir.", styles["table"])],
     ], [26 * mm, 44 * mm, 52 * mm, 52 * mm])]
 
     story += [Spacer(1, 3 * mm), para(
         "<b>Regla derivada.</b> Un falso VERIFIED y un falso UNSAFE nunca se compensan entre si en una metrica "
-        "agregada. Ante cualquier duda de diseno, Proof degrada a INCONCLUSIVE. Toda optimizacion que reduzca ruido "
+        "agregada. Ante cualquier duda de diseno, CloudProof degrada a INCONCLUSIVE. Toda optimizacion que reduzca ruido "
         "a costa de aumentar aunque sea marginalmente la probabilidad de un falso VERIFIED queda prohibida, sin "
         "importar cuanto mejore la experiencia percibida.",
         styles["warn"],
@@ -243,7 +243,7 @@ def build_addendum() -> None:
     story += section(
         "3. Descomposicion: cinco propiedades, cinco metas distintas",
         [
-            "La ambicion correcta no es 'Proof acierta el 99.99% de las veces'. Esa frase no es medible porque no "
+            "La ambicion correcta no es 'CloudProof acierta el 99.99% de las veces'. Esa frase no es medible porque no "
             "declara el denominador. La ambicion correcta es un regimen con cinco propiedades independientes, cada "
             "una con su meta, su metodo de medicion y su condicion de falla.",
         ],
@@ -253,7 +253,7 @@ def build_addendum() -> None:
         [cell("Propiedad", styles["tablehead"]), cell("Definicion", styles["tablehead"]),
          cell("Meta v0.4", styles["tablehead"]), cell("Como se mide", styles["tablehead"])],
         [cell("<b>P1. Soundness</b>", styles["table"]),
-         cell("Si Proof emite VERIFIED, la transicion es operativa dentro del alcance declarado. Es una propiedad de <i>seguridad</i>: no admite excepciones estadisticas.", styles["table"]),
+         cell("Si CloudProof emite VERIFIED, la transicion es operativa dentro del alcance declarado. Es una propiedad de <i>seguridad</i>: no admite excepciones estadisticas.", styles["table"]),
          cell("<b>Cero caminos conocidos no mitigados.</b> No es un porcentaje: es una lista que debe estar vacia.", styles["table"]),
          cell("Auditoria adversarial periodica + corpus de casos disenados para producir un falso VERIFIED. Cada camino hallado se cierra o se documenta como limite de alcance.", styles["table"])],
         [cell("<b>P2. Determinismo</b>", styles["table"]),
@@ -261,7 +261,7 @@ def build_addendum() -> None:
          cell("<b>99.99%</b> de concordancia sobre corridas repetidas.", styles["table"]),
          cell("N corridas del mismo par de SHAs en el mismo runner y en runners de distinta carga. Toda discordancia es un defecto del arnes, no del release.", styles["table"])],
         [cell("<b>P3. Precision</b>", styles["table"]),
-         cell("Si Proof emite UNSAFE, existe una causa real y reproducible.", styles["table"]),
+         cell("Si CloudProof emite UNSAFE, existe una causa real y reproducible.", styles["table"]),
          cell("<b>&gt; 99.5%</b> (falso UNSAFE &lt; 0.5%).", styles["table"]),
          cell("Revision humana de cada UNSAFE en pilotos, con reproduccion obligatoria del hallazgo.", styles["table"])],
         [cell("<b>P4. Cobertura</b>", styles["table"]),
@@ -284,7 +284,7 @@ def build_addendum() -> None:
     )]
 
     story += [para(
-        "Separar P1 de P4 es lo que permite ser mucho mas ambicioso sin volverse deshonesto. Proof puede afirmar con "
+        "Separar P1 de P4 es lo que permite ser mucho mas ambicioso sin volverse deshonesto. CloudProof puede afirmar con "
         "rigor que <i>nunca declara seguro lo que su propio alcance demostro roto</i> (P1, absoluta) sin afirmar "
         "jamas que <i>ve todo lo que puede romperse</i> (P4, acotada y explicita). La v0.2 mezclaba ambas en un solo "
         "numero y por eso no podia ser exigente en ninguna.",
@@ -295,13 +295,13 @@ def build_addendum() -> None:
 
     # ------------------------------------- 4. por que aca si es alcanzable
     story += section(
-        "4. Por que 99.99% es alcanzable en Proof y no en un evaluador probabilistico",
+        "4. Por que 99.99% es alcanzable en CloudProof y no en un evaluador probabilistico",
         [
-            "La meta del 3% era razonable para una categoria de herramienta que Proof deliberadamente no es. Un "
+            "La meta del 3% era razonable para una categoria de herramienta que CloudProof deliberadamente no es. Un "
             "analizador heuristico o un evaluador basado en un modelo de lenguaje tiene un piso de error irreducible: "
             "su salida es una estimacion, y dos ejecuciones con la misma entrada pueden diferir por construccion. "
             "Para esa categoria, 3% es una meta honesta y 99.99% seria una fantasia.",
-            "Proof pertenece a otra categoria y esa diferencia es precisamente su moat. La decision D-005 y la D-015 "
+            "CloudProof pertenece a otra categoria y esa diferencia es precisamente su moat. La decision D-005 y la D-015 "
             "establecieron que ningun comando nucleo depende de una llamada a un modelo para producir su resultado. "
             "El veredicto se deriva de assertions tipadas sobre hechos observados en una ejecucion real. Un sistema "
             "asi no tiene un piso de error probabilistico: tiene defectos, que son finitos, enumerables y cerrables.",
@@ -329,7 +329,7 @@ def build_addendum() -> None:
         [
             "El regimen de esta revision no es aspiracional. Se apoya en una auditoria adversarial del motor "
             "realizada con revision independiente y verificacion cruzada de cada hallazgo contra el codigo fuente. "
-            "El resultado relevante para la tesis es que, dentro del stack que Proof declara soportar, se "
+            "El resultado relevante para la tesis es que, dentro del stack que CloudProof declara soportar, se "
             "identificaron <b>exactamente dos caminos confirmados a un falso VERIFIED</b>. No una familia abierta de "
             "problemas: dos defectos concretos con fix acotado.",
         ],
@@ -356,7 +356,7 @@ def build_addendum() -> None:
 
     story += [para(
         "<b>Hueco de alcance identificado y asumido.</b> No existe verificacion de perdida de datos: el motor no "
-        "cuenta filas ni compara contenido entre el esquema base y el migrado. Proof puede declarar operativa una "
+        "cuenta filas ni compara contenido entre el esquema base y el migrado. CloudProof puede declarar operativa una "
         "transicion sin haber contado jamas una fila. No es un camino a falso VERIFIED dentro del alcance declarado "
         "-porque el alcance nunca prometio integridad de datos- pero es la brecha conceptual mas grande del motor y "
         "queda incorporada como P1 del plan de la seccion 6.",
@@ -436,7 +436,7 @@ def build_addendum() -> None:
 
     story += [Spacer(1, 2 * mm), para(
         "<b>Principio.</b> Un verificador que obliga a su consumidor a gastar su capacidad de atencion en leerlo "
-        "compite contra la tarea que deberia estar habilitando. La meta no es que Proof sea invocado muchas veces: "
+        "compite contra la tarea que deberia estar habilitando. La meta no es que CloudProof sea invocado muchas veces: "
         "es que cada invocacion acerque a una decision correcta con el menor gasto posible de la capacidad limitada "
         "de quien decide -sea contexto de un modelo o atencion de una persona.",
         styles["callout"],
@@ -464,7 +464,7 @@ def build_addendum() -> None:
         "agentes tambien debe hacerlo. Una superficie que entrega menos informacion que otra convierte la eleccion "
         "de transporte en una decision de seguridad implicita, que es exactamente lo que el principio de "
         "interoperabilidad de la v0.3 buscaba evitar.",
-        "<b>Coherencia entre lo documentado y lo emitido.</b> Las instrucciones que Proof genera para agentes no "
+        "<b>Coherencia entre lo documentado y lo emitido.</b> Las instrucciones que CloudProof genera para agentes no "
         "pueden exigir garantias que el propio motor no produce. Toda instruccion generada debe describir el estado "
         "real del artefacto emitido y declarar explicitamente que garantias todavia no estan disponibles.",
     ], styles)
@@ -480,7 +480,7 @@ def build_addendum() -> None:
         styles,
     )
     story += bullets([
-        "<b>No promete cobertura de la superficie de riesgo.</b> P4 no tiene meta numerica. Proof demuestra "
+        "<b>No promete cobertura de la superficie de riesgo.</b> P4 no tiene meta numerica. CloudProof demuestra "
         "propiedades sobre lo que fue ejercitado y publica lo que no lo fue.",
         "<b>No promete deteccion de perdida o corrupcion de datos</b> hasta que exista verificacion de integridad. "
         "Hasta entonces es un limite declarado, no una capacidad implicita.",
@@ -570,7 +570,7 @@ def build_addendum() -> None:
     )]
     story += [para(
         "Esa exigencia no es alcanzable para una herramienta que estima. Es alcanzable para una que ejecuta, observa "
-        "y deriva. Que Proof pueda aspirar a ella no es una ambicion desmedida: es la consecuencia directa de la "
+        "y deriva. Que CloudProof pueda aspirar a ella no es una ambicion desmedida: es la consecuencia directa de la "
         "decision de no poner un modelo probabilistico en el camino de la decision. La meta del 3% no era prudente. "
         "Era la meta de otro producto.",
         styles["body"],
@@ -587,7 +587,7 @@ def merge_with_thesis() -> None:
             writer.add_page(page)
     writer.add_metadata({
         "/Title": "Tesis de Producto - Developer Reliability Platform v0.4",
-        "/Author": "Proof",
+        "/Author": "CloudProof",
         "/Subject": "Addendum estrategico: el regimen de confiabilidad",
         "/Keywords": "release safety, evidence, soundness, determinism, agents, reliability",
     })

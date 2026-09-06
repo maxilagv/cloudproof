@@ -1,5 +1,5 @@
 {
-  "name": "@proof/http-recorder",
+  "name": "@cloudproof/http-recorder",
   "version": "0.0.1",
   "description": "Captura requests HTTP durante baseline tests y las reproduce contra la app candidata/schema migrado",
   "license": "SEE LICENSE IN LICENSE",

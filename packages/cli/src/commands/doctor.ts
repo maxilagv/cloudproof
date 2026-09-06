@@ -3,8 +3,8 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { createConnection } from "node:net";
 import { spawnSync } from "node:child_process";
 import semver from "semver";
-import { loadConfig, type ProjectConfig } from "@proof/config";
-import { isPrismaSchemaTarget, preflightImageRuntime } from "@proof/docker-executor";
+import { loadConfig, type ProjectConfig } from "@cloudproof/config";
+import { isPrismaSchemaTarget, preflightImageRuntime } from "@cloudproof/docker-executor";
 import { classifyEnvKeys } from "./env-classifier.js";
 import { countAuthOperations } from "./auth-fixtures.js";
 import { findOpenApiSpec } from "./openapi-workload.js";
@@ -74,7 +74,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorFind
   const findings: DoctorFinding[] = [
     ...checkNodeVersion(cwd),
     ...(await checkEnvDrift(cwd, config)),
-    ...checkProofDirIgnored(cwd),
+    ...checkCloudProofDirIgnored(cwd),
     ...(options.systemChecks === false
       ? []
       : [
@@ -128,7 +128,7 @@ function checkNodeVersion(cwd: string): DoctorFinding[] {
 
 const ENV_SURFACE_SKIP = new Set([
   ".git",
-  ".proof",
+  ".cloudproof",
   ".next",
   ".turbo",
   "node_modules",
@@ -250,7 +250,7 @@ function checkEnvDrift(
       severity: "MEDIUM",
       message:
         `${relevant.length} variable(s) ausentes son requeridas por lecturas sin fallback en la superficie verificada: ` +
-        `${shown}${extra}. Evidencia: ${relevant.flatMap((name) => inferred.get(name)?.evidence ?? []).slice(0, 5).join(", ") || "override proof.config"}.`,
+        `${shown}${extra}. Evidencia: ${relevant.flatMap((name) => inferred.get(name)?.evidence ?? []).slice(0, 5).join(", ") || "override cloudproof.config"}.`,
     });
   }
   if (conditional.length > 0) {
@@ -278,7 +278,7 @@ function insideProject(cwd: string, path: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-function checkProofDirIgnored(cwd: string): DoctorFinding[] {
+function checkCloudProofDirIgnored(cwd: string): DoctorFinding[] {
   const repository = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
     cwd,
     encoding: "utf-8",
@@ -287,7 +287,7 @@ function checkProofDirIgnored(cwd: string): DoctorFinding[] {
   if (repository.status !== 0) return [];
   // Peor caso primero: evidencia YA versionada — un bundle en la historia de
   // Git no es un problema estético, es evidencia local publicada como código.
-  const tracked = spawnSync("git", ["ls-files", "--", ".proof"], {
+  const tracked = spawnSync("git", ["ls-files", "--", ".cloudproof"], {
     cwd,
     encoding: "utf-8",
     windowsHide: true,
@@ -304,14 +304,14 @@ function checkProofDirIgnored(cwd: string): DoctorFinding[] {
       {
         severity: "HIGH",
         message:
-          `Hay evidencia de .proof/ versionada en Git (${trackedFiles.length} archivo(s), ej. ${trackedFiles[0]}). ` +
-          "Sacala del índice con `git rm -r --cached .proof`, corré `proof init` para agregar .proof/ a " +
+          `Hay evidencia de .cloudproof/ versionada en Git (${trackedFiles.length} archivo(s), ej. ${trackedFiles[0]}). ` +
+          "Sacala del índice con `git rm -r --cached .cloudproof`, corré `cloudproof init` para agregar .cloudproof/ a " +
           ".gitignore y revisá el historial antes de publicar.",
       },
     ];
   }
-  if (!existsSync(join(cwd, ".proof"))) return [];
-  const ignored = spawnSync("git", ["check-ignore", "-q", ".proof/probe"], {
+  if (!existsSync(join(cwd, ".cloudproof"))) return [];
+  const ignored = spawnSync("git", ["check-ignore", "-q", ".cloudproof/probe"], {
     cwd,
     encoding: "utf-8",
     windowsHide: true,
@@ -321,8 +321,8 @@ function checkProofDirIgnored(cwd: string): DoctorFinding[] {
     {
       severity: "LOW",
       message:
-        ".proof/ no está ignorado por Git; contiene evidencia local y snapshots que no deben versionarse. " +
-        "Corré `proof init` (agrega .proof/ a .gitignore) o agregalo a mano.",
+        ".cloudproof/ no está ignorado por Git; contiene evidencia local y snapshots que no deben versionarse. " +
+        "Corré `cloudproof init` (agrega .cloudproof/ a .gitignore) o agregalo a mano.",
     },
   ];
 }
@@ -402,7 +402,7 @@ function serviceFindings(cwd: string, config: ProjectConfig): DoctorFinding[] {
   const findings: DoctorFinding[] = [];
   const entries = Object.entries(config.services);
   if (entries.length === 0) {
-    return [{ severity: "CRITICAL", message: "proof.config.ts no declara ningún servicio." }];
+    return [{ severity: "CRITICAL", message: "cloudproof.config.ts no declara ningún servicio." }];
   }
   if (entries.length > 1) {
     findings.push({
@@ -550,7 +550,7 @@ async function checkProject(cwd: string): Promise<DoctorFinding[]> {
     if (config.coverage === undefined) {
       findings.push({
         severity: "MEDIUM",
-        message: "No se declaró coverage.requiredRoutes; Proof no emitirá VERIFIED con cobertura desconocida.",
+        message: "No se declaró coverage.requiredRoutes; CloudProof no emitirá VERIFIED con cobertura desconocida.",
       });
     }
     for (const approval of config.approvals) {
@@ -677,7 +677,7 @@ function portInUse(port: number): Promise<boolean> {
 /**
  * release verify publica solo puertos efímeros, así que un puerto declarado
  * ocupado no rompe la corrida — pero un workload que apunte al puerto fijo
- * puede golpear la instancia local en vez de la de Proof y contaminar la
+ * puede golpear la instancia local en vez de la de CloudProof y contaminar la
  * evidencia. Por eso es LOW y no HIGH.
  */
 async function checkServicePorts(cwd: string): Promise<DoctorFinding[]> {
@@ -697,7 +697,7 @@ async function checkServicePorts(cwd: string): Promise<DoctorFinding[]> {
         message:
           `Servicio "${name}": el puerto ${service.port} ya está en uso en 127.0.0.1. ` +
           `release verify publica puertos efímeros y no choca, pero un workload apuntado al puerto fijo ` +
-          `puede golpear esa instancia en vez de la de Proof; detenela antes de verificar.`,
+          `puede golpear esa instancia en vez de la de CloudProof; detenela antes de verificar.`,
       });
     }
   }

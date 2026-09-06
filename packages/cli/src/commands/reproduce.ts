@@ -9,29 +9,29 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { loadConfig, type ProjectConfig } from "@proof/config";
+import { loadConfig, type ProjectConfig } from "@cloudproof/config";
 import {
   ComposeExecutor,
   SpawnRunner,
   type ComposeExecutorOptions,
   type CommandRunner,
   type RunningContainer,
-} from "@proof/docker-executor";
+} from "@cloudproof/docker-executor";
 import {
   Recorder,
   Replayer,
   type RecordedExchange,
   type ReplayResult,
-} from "@proof/http-recorder";
-import { verifyRelease } from "@proof/postgres-verifier";
-import { ProofBundleSchema, type ProofBundle, type Assertion } from "@proof/schema";
+} from "@cloudproof/http-recorder";
+import { verifyRelease } from "@cloudproof/postgres-verifier";
+import { CloudProofBundleSchema, type CloudProofBundle, type Assertion } from "@cloudproof/schema";
 
 /**
  * Ver tesis, sección 6.1 ("Reproducción: todo fallo serio ofrece un
  * comando") y 19.3 paso 10. Cada finding nuevo conserva su estado y el
  * exchange mínimo dentro del bundle. Los findings de A0 + S1 reconstruyen
  * la imagen base contra Postgres migrado hasta subject.headSha; los fallos
- * de etapa vuelven a ejecutar el proof y extraen la misma assertion.
+ * de etapa vuelven a ejecutar el cloudproof y extraen la misma assertion.
  */
 export interface ReproduceOptions {
   json?: boolean;
@@ -44,7 +44,7 @@ export interface ReproduceOptions {
 
 export interface LocatedAssertion {
   assertion: Assertion;
-  subject: ProofBundle["subject"];
+  subject: CloudProofBundle["subject"];
   bundlePath: string;
 }
 
@@ -80,7 +80,7 @@ export interface ReproduceDependencies {
 export interface LiveReproductionResult {
   kind: "started";
   assertion: Assertion;
-  subject: ProofBundle["subject"];
+  subject: CloudProofBundle["subject"];
   bundlePath: string;
   servicePath: string;
   runId: string;
@@ -96,7 +96,7 @@ export interface LiveReproductionResult {
 export interface RerunReproductionResult {
   kind: "rerun";
   assertion: Assertion;
-  conclusion: ProofBundle["conclusion"];
+  conclusion: CloudProofBundle["conclusion"];
   runId: string;
 }
 
@@ -114,7 +114,7 @@ interface ReproductionManifest {
   runId: string;
   status: "starting" | "ready";
   createdAt: string;
-  subject: ProofBundle["subject"];
+  subject: CloudProofBundle["subject"];
   bundlePath: string;
   servicePath: string;
   serviceName?: string;
@@ -135,7 +135,7 @@ const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
 export class AssertionNotFoundError extends Error {
   constructor(id: string) {
-    super(`No se encontró la assertion "${id}" en ningún Proof Bundle guardado en .proof/.`);
+    super(`No se encontró la assertion "${id}" en ningún CloudProof Bundle guardado en .cloudproof/.`);
     this.name = "AssertionNotFoundError";
   }
 }
@@ -143,7 +143,7 @@ export class AssertionNotFoundError extends Error {
 export class AssertionAmbiguousError extends Error {
   constructor(id: string, bundlePaths: string[]) {
     super(
-      `La assertion "${id}" aparece en más de un Proof Bundle:\n` +
+      `La assertion "${id}" aparece en más de un CloudProof Bundle:\n` +
         bundlePaths.map((path) => `  ${path}`).join("\n") +
         `\nElegí el bundle exacto con --bundle <ruta>.`,
     );
@@ -184,14 +184,14 @@ const defaultDependencies: ReproduceDependencies = {
       "ps",
       "-aq",
       "--filter",
-      `label=dev.proof.run=${runId}`,
+      `label=dev.cloudproof.run=${runId}`,
     ]);
     const networks = await runner.run("docker", [
       "network",
       "ls",
       "-q",
       "--filter",
-      `label=dev.proof.run=${runId}`,
+      `label=dev.cloudproof.run=${runId}`,
     ]);
     if (containers.exitCode !== 0 || networks.exitCode !== 0) {
       throw new ReproductionStateError(
@@ -219,13 +219,13 @@ function bundlePaths(cwd: string, explicitBundle?: string): string[] {
     return [resolve(cwd, explicitBundle)];
   }
 
-  const proofDir = join(cwd, ".proof");
-  if (!existsSync(proofDir)) {
+  const cloudproofDir = join(cwd, ".cloudproof");
+  if (!existsSync(cloudproofDir)) {
     return [];
   }
-  return readdirSync(proofDir, { withFileTypes: true })
+  return readdirSync(cloudproofDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => join(proofDir, entry.name))
+    .map((entry) => join(cloudproofDir, entry.name))
     .sort();
 }
 
@@ -239,7 +239,7 @@ function assertionMatches(
     if (!existsSync(bundlePath)) {
       continue;
     }
-    const bundle: ProofBundle = ProofBundleSchema.parse(
+    const bundle: CloudProofBundle = CloudProofBundleSchema.parse(
       JSON.parse(readFileSync(bundlePath, "utf-8")),
     );
     const assertion = bundle.assertions.find((candidate) => candidate.id === assertionId);
@@ -279,7 +279,7 @@ export function findAssertionContext(
 
 export function reproductionManifestPath(assertionId: string, cwd: string = process.cwd()): string {
   const digest = createHash("sha256").update(assertionId).digest("hex").slice(0, 20);
-  return join(resolve(cwd), ".proof", "reproductions", digest + ".json");
+  return join(resolve(cwd), ".cloudproof", "reproductions", digest + ".json");
 }
 
 function reproductionArtifactPaths(assertionId: string, cwd: string): {
@@ -312,20 +312,20 @@ function composeManifest(input: {
     "  postgres:",
     `    image: ${JSON.stringify(input.postgresImage)}`,
     "    environment:",
-    "      POSTGRES_USER: proof",
-    "      POSTGRES_PASSWORD: proof",
-    "      POSTGRES_DB: proof",
+    "      POSTGRES_USER: cloudproof",
+    "      POSTGRES_PASSWORD: cloudproof",
+    "      POSTGRES_DB: cloudproof",
     "    healthcheck:",
     // SELECT 1 por TCP y no pg_isready: el postmaster temporal de initdb
     // responde pg_isready por socket Unix pero NO escucha TCP; solo el
     // definitivo lo hace (misma semántica que waitPostgresTcpReady).
-    "      test: [\"CMD-SHELL\", \"PGPASSWORD=proof psql -X -h 127.0.0.1 -U proof -d proof -c 'SELECT 1'\"]",
+    "      test: [\"CMD-SHELL\", \"PGPASSWORD=cloudproof psql -X -h 127.0.0.1 -U cloudproof -d cloudproof -c 'SELECT 1'\"]",
     "      interval: 1s",
     "      timeout: 3s",
     "      retries: 30",
     "    volumes:",
-    `      - ${JSON.stringify(`./${input.sqlFileName}:/docker-entrypoint-initdb.d/proof.sql:ro`)}`,
-    "    networks: [proof_internal]",
+    `      - ${JSON.stringify(`./${input.sqlFileName}:/docker-entrypoint-initdb.d/cloudproof.sql:ro`)}`,
+    "    networks: [cloudproof_internal]",
     "    mem_limit: 1g",
     "    cpus: 1.0",
     "    pids_limit: 256",
@@ -333,12 +333,12 @@ function composeManifest(input: {
     "  app:",
     `    image: ${JSON.stringify(input.imageTag)}`,
     "    environment:",
-    "      DATABASE_URL: postgresql://proof:proof@postgres:5432/proof",
+    "      DATABASE_URL: postgresql://cloudproof:cloudproof@postgres:5432/cloudproof",
     `      PORT: ${JSON.stringify(String(input.appPort))}`,
     "    depends_on:",
     "      postgres:",
     "        condition: service_healthy",
-    "    networks: [proof_internal]",
+    "    networks: [cloudproof_internal]",
     "    mem_limit: 1g",
     "    cpus: 1.0",
     "    pids_limit: 256",
@@ -353,15 +353,15 @@ function composeManifest(input: {
     "    ports:",
     `      - ${JSON.stringify(`127.0.0.1::${input.appPort}`)}`,
     '      - "127.0.0.1::5432"',
-    "    networks: [proof_internal, proof_access]",
+    "    networks: [cloudproof_internal, cloudproof_access]",
     "    mem_limit: 128m",
     "    cpus: 0.25",
     "    pids_limit: 64",
     "    security_opt: [no-new-privileges:true]",
     "networks:",
-    "  proof_internal:",
+    "  cloudproof_internal:",
     "    internal: true",
-    "  proof_access:",
+    "  cloudproof_access:",
     "",
   ].join("\n");
 }
@@ -418,7 +418,7 @@ function readManifest(path: string, assertionId: string): ReproductionManifest {
 }
 
 function cleanupCommand(assertionId: string): string {
-  return `proof reproduce ${JSON.stringify(assertionId)} --cleanup`;
+  return `cloudproof reproduce ${JSON.stringify(assertionId)} --cleanup`;
 }
 
 interface SelectedService {
@@ -453,14 +453,14 @@ function optionalServiceFields(service: {
   };
 }
 
-function selectedService(config: ProjectConfig, subject: ProofBundle["subject"]): SelectedService {
+function selectedService(config: ProjectConfig, subject: CloudProofBundle["subject"]): SelectedService {
   if (subject.service !== undefined) {
     const configured = Object.hasOwn(config.services, subject.service.name)
       ? config.services[subject.service.name]
       : undefined;
     if (configured === undefined) {
       throw new ReproductionContextError(
-        `El bundle identifica el servicio "${subject.service.name}", pero ya no existe en proof.config.ts.`,
+        `El bundle identifica el servicio "${subject.service.name}", pero ya no existe en cloudproof.config.ts.`,
       );
     }
     if (configured.path !== subject.service.path) {
@@ -480,14 +480,14 @@ function selectedService(config: ProjectConfig, subject: ProofBundle["subject"])
   if (services.length !== 1) {
     throw new ReproductionContextError(
       services.length === 0
-        ? "proof.config.ts no declara ningún servicio; no se puede reconstruir la imagen A0."
-        : "proof.config.ts declara más de un servicio, pero el Proof Bundle actual no identifica cuál produjo la assertion. Pasá a un bundle/schema que preserve ese dato antes de reproducir; no se eligió un servicio arbitrariamente.",
+        ? "cloudproof.config.ts no declara ningún servicio; no se puede reconstruir la imagen A0."
+        : "cloudproof.config.ts declara más de un servicio, pero el CloudProof Bundle actual no identifica cuál produjo la assertion. Pasá a un bundle/schema que preserve ese dato antes de reproducir; no se eligió un servicio arbitrariamente.",
     );
   }
   const selected = services[0];
   if (selected === undefined) {
     throw new ReproductionContextError(
-      "proof.config.ts no declara ningún servicio; no se puede reconstruir la imagen A0.",
+      "cloudproof.config.ts no declara ningún servicio; no se puede reconstruir la imagen A0.",
     );
   }
   const [name, service] = selected;
@@ -502,7 +502,7 @@ function postgresImage(config: ProjectConfig): string {
   const postgres = Object.values(config.data).find((source) => source.kind === "postgres");
   if (postgres === undefined) {
     throw new ReproductionContextError(
-      "proof.config.ts no declara PostgreSQL; no se eligió una base implícita para reproducir.",
+      "cloudproof.config.ts no declara PostgreSQL; no se eligió una base implícita para reproducir.",
     );
   }
   return postgres.version === undefined ? "postgres:16-alpine" : `postgres:${postgres.version}-alpine`;
@@ -595,7 +595,7 @@ async function prepareReplayState(
   executor: ReproductionExecutor,
   service: SelectedService,
   config: ProjectConfig,
-  subject: ProofBundle["subject"],
+  subject: CloudProofBundle["subject"],
   cwd: string,
   commandRunner: CommandRunner,
   requireWorkload: boolean,
@@ -608,7 +608,7 @@ async function prepareReplayState(
     ...(service.buildArgs === undefined ? {} : { buildArgs: service.buildArgs }),
   });
   const s0 = await executor.startEphemeralPostgres(pgSpec(subject.baseSha, "S0", service));
-  // Clone before executing the workload.  The proof compares the baseline and
+  // Clone before executing the workload.  The cloudproof compares the baseline and
   // replay from equivalent starting data; cloning afterwards would duplicate
   // all writes when the recorded workload is replayed.
   const replayS1 = await executor.startEphemeralPostgres(
@@ -617,7 +617,7 @@ async function prepareReplayState(
   if (config.workload === undefined) {
     if (requireWorkload) {
       throw new ReproductionContextError(
-        "El finding requiere reconstruir los datos del baseline, pero proof.config.ts ya no declara workload.",
+        "El finding requiere reconstruir los datos del baseline, pero cloudproof.config.ts ya no declara workload.",
       );
     }
     return { imageTag, s0, replayS1 };
@@ -634,7 +634,7 @@ async function prepareReplayState(
     const proxyUrl = await recorder.start();
     const result = await commandRunner.run(config.workload.command, config.workload.args, {
       cwd,
-      env: { PROOF_BASE_URL: proxyUrl },
+      env: { CLOUDPROOF_BASE_URL: proxyUrl },
       timeoutMs: config.workload.timeoutMs ?? 600_000,
     });
     recorder.stop();
@@ -654,7 +654,7 @@ async function prepareReplayState(
   return { imageTag, s0, replayS1 };
 }
 
-async function rerunProofFinding(
+async function rerunCloudProofFinding(
   assertionId: string,
   located: LocatedAssertion,
   config: ProjectConfig,
@@ -736,9 +736,9 @@ export async function runReproduce(
     postgresImage: configuredPostgresImage,
   });
 
-  if (located.assertion.reproductionContext?.kind === "rerun-proof") {
+  if (located.assertion.reproductionContext?.kind === "rerun-cloudproof") {
     try {
-      return await rerunProofFinding(
+      return await rerunCloudProofFinding(
         assertionId,
         located,
         config,
@@ -812,7 +812,7 @@ export async function runReproduce(
     writeFileSync(
       artifactPaths.compose,
       composeManifest({
-        projectName: `proof-reproduction-${basename(artifactPaths.compose, ".compose.yml")}`,
+        projectName: `cloudproof-reproduction-${basename(artifactPaths.compose, ".compose.yml")}`,
         imageTag,
         postgresImage: configuredPostgresImage,
         sqlFileName: basename(artifactPaths.sql),

@@ -1,5 +1,5 @@
-Proof Restricted Use License (PRUL) — Version 1.0
-Copyright (c) 2026 Proof contributors. Todos los derechos reservados.
+CloudProof Restricted Use License (CPRUL) — Version 1.0
+Copyright (c) 2026 CloudProof contributors. Todos los derechos reservados.
 
 Este software y su documentación asociada (el "Software") no son software
 libre ni de código abierto. El Software se distribuye bajo licencia
@@ -66,7 +66,7 @@ Software implica la aceptación íntegra de esta licencia.
    (f) eliminar, ocultar o alterar avisos de copyright, marcas, atribución
        o esta licencia en cualquier copia del Software; ni
 
-   (g) utilizar el nombre "Proof", sus marcas asociadas o las de sus
+   (g) utilizar el nombre "CloudProof", sus marcas asociadas o las de sus
        contribuyentes con fines promocionales sin autorización previa por
        escrito.
 
@@ -100,7 +100,7 @@ Software implica la aceptación íntegra de esta licencia.
    EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO,
    EXPRESA O IMPLÍCITA, INCLUYENDO SIN LIMITACIÓN LAS GARANTÍAS DE
    COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO
-   INFRACCIÓN. Proof es una herramienta de evidencia, no un sustituto del
+   INFRACCIÓN. CloudProof es una herramienta de evidencia, no un sustituto del
    juicio humano: un veredicto `VERIFIED` no constituye garantía de
    ausencia de defectos, y la responsabilidad final de aprobar un release
    sigue siendo del Licenciatario.

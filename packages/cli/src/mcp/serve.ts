@@ -11,21 +11,21 @@ import { findAssertion } from "../commands/reproduce.js";
  *
  *  - Transporte stdio (D-017): pensado para correr como subproceso del
  *    harness del agente, no como servidor HTTP.
- *  - Solo 3 tools en esta versión: proof_release_plan,
- *    proof_release_verify y proof_reproduce. proof_check queda afuera
+ *  - Solo 3 tools en esta versión: cloudproof_release_plan,
+ *    cloudproof_release_verify y cloudproof_reproduce. cloudproof_check queda afuera
  *    porque publica un Check Run (efecto en GitHub, no solo lectura) —
  *    ver nota en la sección 23.1 sobre no exponer nada que dispare
  *    compute/acciones pagas sin que el tool lo advierta explícitamente.
- *    Se agrega cuando @proof/plugin-github-actions#publishCheckRun deje
+ *    Se agrega cuando @cloudproof/plugin-github-actions#publishCheckRun deje
  *    de ser un stub y se defina el gating de confirmación.
  *  - conclusion viaja como enum tipado dentro del JSON, nunca como prosa.
  */
 
-export function createProofMcpServer(): McpServer {
-  const server = new McpServer({ name: "proof", version: "0.0.1" });
+export function createCloudProofMcpServer(): McpServer {
+  const server = new McpServer({ name: "cloudproof", version: "0.0.1" });
 
   server.tool(
-    "proof_release_plan",
+    "cloudproof_release_plan",
     "Fast path estatico y acotado a 120 segundos. Llamalo primero para clasificar el diff, " +
       "elegir el nivel de assurance y obtener el comando siguiente. Nunca ejecuta Docker/workloads " +
       "y nunca devuelve VERIFIED: decision siempre es PLAN_ONLY_NOT_VERIFIED. Un plan incompleto " +
@@ -42,7 +42,7 @@ export function createProofMcpServer(): McpServer {
         .describe(
           "true: planifica sobre un snapshot inmutable del arbol de trabajo (cambios sin commit); excluye headSha",
         ),
-      service: z.string().optional().describe("Servicio declarado en proof.config"),
+      service: z.string().optional().describe("Servicio declarado en cloudproof.config"),
       profile: z.enum(["trusted", "internal", "fork"]).optional(),
       cwd: z.string().optional().describe("Directorio del proyecto"),
     },
@@ -62,11 +62,11 @@ export function createProofMcpServer(): McpServer {
   );
 
   server.tool(
-    "proof_release_verify",
+    "cloudproof_release_verify",
     "Ejecuta la matriz exigida por el plan: completa ante cambios/riesgos de datos (A0/A1 sobre S0/S1, " +
       "coexistencia y rollback) o enfocada para un diff de aplicación con schema diff cero. " +
-      "y devuelve un Proof Bundle con conclusion VERIFIED | UNSAFE | INCONCLUSIVE (enum tipado, no prosa). " +
-      "Seguí el assurance/nextCommand de proof_release_plan; es una operación cara que levanta contenedores y bases efímeras. " +
+      "y devuelve un CloudProof Bundle con conclusion VERIFIED | UNSAFE | INCONCLUSIVE (enum tipado, no prosa). " +
+      "Seguí el assurance/nextCommand de cloudproof_release_plan; es una operación cara que levanta contenedores y bases efímeras. " +
       "Cómo actuar según conclusion: VERIFIED → podés declarar el snapshot probado citando el bundle; " +
       "si provenance.candidate.developmentOnly=true todavía falta verificar el commit publicado para merge/deploy. " +
       "UNSAFE → NO declarar terminado; las assertions fallidas pueden traer 'remediation' (secuencia expand/contract " +
@@ -89,7 +89,7 @@ export function createProofMcpServer(): McpServer {
           "true: verifica un snapshot inmutable del arbol de trabajo (cambios sin commit, ideal para iterar). " +
             "El bundle queda atado a ese snapshot; un gate de merge sigue exigiendo verificar el commit publicado. Excluye headSha.",
         ),
-      service: z.string().optional().describe("Servicio de proof.config.ts en monorepos"),
+      service: z.string().optional().describe("Servicio de cloudproof.config.ts en monorepos"),
       profile: z.enum(["trusted", "internal", "fork"]).optional(),
       cwd: z.string().optional().describe("Directorio del proyecto (default: cwd del proceso)"),
     },
@@ -111,10 +111,10 @@ export function createProofMcpServer(): McpServer {
   );
 
   server.tool(
-    "proof_reproduce",
-    "Devuelve la evidencia guardada de una assertion específica de un Proof Bundle previo, identificada por su id " +
-      "(el mismo id que aparece en el campo 'reproduction' de un resultado de proof_release_verify). " +
-      "MANDATORY: solo tiene sentido llamar esta tool después de haber corrido proof_release_verify en la misma sesión " +
+    "cloudproof_reproduce",
+    "Devuelve la evidencia guardada de una assertion específica de un CloudProof Bundle previo, identificada por su id " +
+      "(el mismo id que aparece en el campo 'reproduction' de un resultado de cloudproof_release_verify). " +
+      "MANDATORY: solo tiene sentido llamar esta tool después de haber corrido cloudproof_release_verify en la misma sesión " +
       "y haber recibido un id de assertion fallida — no inventar un id.",
     {
       assertionId: z.string().describe("Id de la assertion, ej. \"postgres.old-app-new-schema.0\""),
@@ -133,7 +133,7 @@ export function createProofMcpServer(): McpServer {
 }
 
 export async function serveMcp(): Promise<void> {
-  const server = createProofMcpServer();
+  const server = createCloudProofMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

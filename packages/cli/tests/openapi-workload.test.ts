@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadConfig } from "@proof/config";
+import { loadConfig } from "@cloudproof/config";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   exampleFromSchema,
@@ -18,7 +18,7 @@ const roots: string[] = [];
 const servers: Server[] = [];
 
 function repo(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "proof-openapi-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-openapi-"));
   roots.push(root);
   for (const [relativePath, contents] of Object.entries(files)) {
     const absolutePath = join(root, relativePath);
@@ -118,10 +118,10 @@ describe("planWorkloadFromOpenApi", () => {
     const post = plan.steps.find((step) => step.method === "POST" && step.path === "/orders");
     expect(post?.auth).toBe(true);
     expect(post?.body).toEqual({
-      customerEmail: "proof-{{RUN}}@example.com",
+      customerEmail: "cloudproof-{{RUN}}@example.com",
       amount: 5,
       currency: "ARS",
-      note: "proof-{{RUN}}",
+      note: "cloudproof-{{RUN}}",
     });
 
     const gapsText = plan.gaps.join("\n");
@@ -144,9 +144,9 @@ describe("planWorkloadFromOpenApi", () => {
 });
 
 describe("renderWorkloadScript — el script generado corre de verdad", () => {
-  it("ejecuta el plan contra PROOF_BASE_URL con datos únicos y Bearer del fixture", async () => {
+  it("ejecuta el plan contra CLOUDPROOF_BASE_URL con datos únicos y Bearer del fixture", async () => {
     const plan = planWorkloadFromOpenApi("openapi.json", structuredClone(ORDERS_SPEC));
-    const root = repo({ "proof.workload.mjs": renderWorkloadScript(plan) });
+    const root = repo({ "cloudproof.workload.mjs": renderWorkloadScript(plan) });
 
     const seen: Array<{ method: string; url: string; auth?: string; body: string }> = [];
     const server = createServer((request, response) => {
@@ -172,10 +172,10 @@ describe("renderWorkloadScript — el script generado corre de verdad", () => {
 
     // execFile async: el server vive en este proceso y una espera síncrona
     // bloquearía el event loop que debe responderle al script.
-    await promisify(execFile)(process.execPath, [join(root, "proof.workload.mjs")], {
+    await promisify(execFile)(process.execPath, [join(root, "cloudproof.workload.mjs")], {
       env: {
         ...process.env,
-        PROOF_BASE_URL: `http://127.0.0.1:${address.port}`,
+        CLOUDPROOF_BASE_URL: `http://127.0.0.1:${address.port}`,
         AUTH_TOKEN: "tok-fixture",
       },
       encoding: "utf-8",
@@ -193,13 +193,13 @@ describe("renderWorkloadScript — el script generado corre de verdad", () => {
     expect(post?.auth).toBe("Bearer tok-fixture");
     const body = JSON.parse(post?.body ?? "{}") as { customerEmail: string; note: string };
     // {{RUN}} fue reemplazado por un id de corrida real.
-    expect(body.customerEmail).toMatch(/^proof-[a-z0-9]+@example\.com$/);
+    expect(body.customerEmail).toMatch(/^cloudproof-[a-z0-9]+@example\.com$/);
     expect(body.note).not.toContain("{{RUN}}");
   });
 });
 
-describe("proof init con OpenAPI (gate 2b, informe 2026-07-18)", () => {
-  it("sin e2e propio genera proof.workload.mjs y coverage real; el config carga", async () => {
+describe("cloudproof init con OpenAPI (gate 2b, informe 2026-07-18)", () => {
+  it("sin e2e propio genera cloudproof.workload.mjs y coverage real; el config carga", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": JSON.stringify({ private: true, scripts: {} }),
@@ -217,7 +217,7 @@ describe("proof init con OpenAPI (gate 2b, informe 2026-07-18)", () => {
     });
 
     const config = await loadConfig(root);
-    expect(config.workload).toEqual({ command: "node", args: ["proof.workload.mjs"] });
+    expect(config.workload).toEqual({ command: "node", args: ["cloudproof.workload.mjs"] });
     expect(config.coverage?.requiredRoutes).toContain("POST /orders");
     expect(config.coverage?.rollbackProbeRoutes).toContain("GET /orders/1");
   });

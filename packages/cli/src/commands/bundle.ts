@@ -11,10 +11,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import {
-  createProofBundleSigningPayload,
-  parseProofBundleJson,
-  type ProofBundle,
-} from "@proof/schema";
+  createCloudProofBundleSigningPayload,
+  parseCloudProofBundleJson,
+  type CloudProofBundle,
+} from "@cloudproof/schema";
 import { conclusionBadge, paint, symbols } from "../ui.js";
 import { renderMatrixCells } from "./release-verify.js";
 
@@ -29,12 +29,12 @@ import { renderMatrixCells } from "./release-verify.js";
  * Honestidad del veredicto: `verify` sin clave pública puede demostrar
  * integridad estructural (el bundle no fue tocado desde la firma) pero
  * JAMÁS confianza — sale con código 1 y lo dice. La política de qué claves
- * son confiables es del consumidor, no de Proof.
+ * son confiables es del consumidor, no de CloudProof.
  */
 
-const KEYS_DIRECTORY = join(".proof", "keys");
-const PRIVATE_KEY_FILE = "proof-signing.key";
-const PUBLIC_KEY_FILE = "proof-signing.pub";
+const KEYS_DIRECTORY = join(".cloudproof", "keys");
+const PRIVATE_KEY_FILE = "cloudproof-signing.key";
+const PUBLIC_KEY_FILE = "cloudproof-signing.pub";
 const SIGNING_ALGORITHM = "ed25519";
 
 const AttestationFileSchema = z
@@ -42,8 +42,8 @@ const AttestationFileSchema = z
     version: z.literal("1"),
     kind: z.literal("dsse"),
     payloadType: z.enum([
-      "application/vnd.proof.bundle.v1+json",
-      "application/vnd.proof.bundle.v2+json",
+      "application/vnd.cloudproof.bundle.v1+json",
+      "application/vnd.cloudproof.bundle.v2+json",
     ]),
     payload: z.string().min(4),
     payloadDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -150,7 +150,7 @@ export function runBundleKeygen(options: BundleKeygenOptions = {}): BundleKeygen
 export interface BundleSignOptions {
   cwd?: string;
   json?: boolean;
-  /** Ruta a la clave privada PEM; default .proof/keys/proof-signing.key. */
+  /** Ruta a la clave privada PEM; default .cloudproof/keys/cloudproof-signing.key. */
   key?: string;
   writeOutput?: (text: string) => void;
 }
@@ -171,7 +171,7 @@ export function runBundleSign(
   const privateKeyPath = resolve(cwd, options.key ?? join(KEYS_DIRECTORY, PRIVATE_KEY_FILE));
   if (!existsSync(privateKeyPath)) {
     throw new Error(
-      `No existe la clave privada ${privateKeyPath}. Generala con \`proof bundle keygen\` o pasá --key <ruta>.`,
+      `No existe la clave privada ${privateKeyPath}. Generala con \`cloudproof bundle keygen\` o pasá --key <ruta>.`,
     );
   }
   const privateKey = createPrivateKey(readFileSync(privateKeyPath, "utf-8"));
@@ -180,8 +180,8 @@ export function runBundleSign(
   }
   const publicKey = createPublicKey(privateKey);
 
-  const bundle = parseProofBundleJson(readFileSync(absoluteBundlePath, "utf-8"));
-  const { payloadType, payload } = createProofBundleSigningPayload(bundle);
+  const bundle = parseCloudProofBundleJson(readFileSync(absoluteBundlePath, "utf-8"));
+  const { payloadType, payload } = createCloudProofBundleSigningPayload(bundle);
   const payloadBytes = Buffer.from(payload, "utf-8");
   const pae = preAuthenticationEncoding(payloadType, payloadBytes);
   const signature = cryptoSign(null, pae, privateKey);
@@ -229,7 +229,7 @@ export function runBundleSign(
 export interface BundleVerifyOptions {
   cwd?: string;
   json?: boolean;
-  /** Ruta a la clave pública PEM; default .proof/keys/proof-signing.pub si existe. */
+  /** Ruta a la clave pública PEM; default .cloudproof/keys/cloudproof-signing.pub si existe. */
   key?: string;
   /** Ruta al attestation; default <bundle>.attestation.json. */
   attestation?: string;
@@ -267,11 +267,11 @@ export function runBundleVerify(
   let payloadMatches = false;
   let digestMatches = false;
   let signatureVerified = false;
-  let bundle: ProofBundle | undefined;
+  let bundle: CloudProofBundle | undefined;
   let attestation: BundleAttestation | undefined;
 
   try {
-    bundle = parseProofBundleJson(readFileSync(absoluteBundlePath, "utf-8"));
+    bundle = parseCloudProofBundleJson(readFileSync(absoluteBundlePath, "utf-8"));
   } catch (error) {
     problems.push(
       `El bundle no valida contra el schema: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
@@ -285,12 +285,12 @@ export function runBundleVerify(
     problems.push(
       existsSync(attestationPath)
         ? `El attestation no es válido: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`
-        : `No existe ${attestationPath}; firmá el bundle con \`proof bundle sign\`.`,
+        : `No existe ${attestationPath}; firmá el bundle con \`cloudproof bundle sign\`.`,
     );
   }
 
   if (bundle !== undefined && attestation !== undefined) {
-    const { payloadType, payload } = createProofBundleSigningPayload(bundle);
+    const { payloadType, payload } = createCloudProofBundleSigningPayload(bundle);
     const payloadBytes = Buffer.from(payload, "utf-8");
     const attested = Buffer.from(attestation.payload, "base64");
     payloadMatches =
@@ -409,10 +409,10 @@ export interface BundleInspectOptions {
 export function runBundleInspect(
   bundlePath: string,
   options: BundleInspectOptions = {},
-): ProofBundle {
+): CloudProofBundle {
   const cwd = resolve(options.cwd ?? process.cwd());
   const absoluteBundlePath = resolve(cwd, bundlePath);
-  const bundle = parseProofBundleJson(readFileSync(absoluteBundlePath, "utf-8"));
+  const bundle = parseCloudProofBundleJson(readFileSync(absoluteBundlePath, "utf-8"));
   const attestationPath = `${absoluteBundlePath}.attestation.json`;
   const hasAttestation = existsSync(attestationPath);
   const writeOutput = options.writeOutput ?? defaultWrite;
@@ -456,8 +456,8 @@ export function runBundleInspect(
   }
   lines.push(
     hasAttestation
-      ? `  ${symbols.dot} attestation presente ${paint.dim(`(verificala con proof bundle verify)`)}`
-      : `  ${symbols.dot} ${paint.dim("sin attestation — firmá con proof bundle sign")}`,
+      ? `  ${symbols.dot} attestation presente ${paint.dim(`(verificala con cloudproof bundle verify)`)}`
+      : `  ${symbols.dot} ${paint.dim("sin attestation — firmá con cloudproof bundle sign")}`,
   );
   const matrixCells = renderMatrixCells(
     bundle.assertions,

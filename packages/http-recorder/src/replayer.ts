@@ -53,7 +53,7 @@ function targetForExchange(targetUrl: string, recordedPath: string): URL {
     throw new TypeError("Replay targetUrl must use http: or https:");
   }
 
-  const path = new URL(recordedPath, "http://proof-replayer.invalid");
+  const path = new URL(recordedPath, "http://cloudproof-replayer.invalid");
   const prefix = target.pathname === "/" ? "" : target.pathname.replace(/\/$/, "");
   target.pathname = prefix + "/" + path.pathname.replace(/^\/+/, "");
   target.search = path.search;

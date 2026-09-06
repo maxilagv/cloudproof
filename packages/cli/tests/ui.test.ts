@@ -55,7 +55,7 @@ describe("programa — interpretación de comandos", () => {
       },
     });
 
-    await expect(program.parseAsync(["node", "proof", "relese"])).rejects.toThrow();
+    await expect(program.parseAsync(["node", "cloudproof", "relese"])).rejects.toThrow();
     expect(stderr).toContain("release");
   });
 
@@ -69,7 +69,7 @@ describe("programa — interpretación de comandos", () => {
       },
     });
 
-    await expect(program.parseAsync(["node", "proof", "--version"])).rejects.toThrow(); // exitOverride
+    await expect(program.parseAsync(["node", "cloudproof", "--version"])).rejects.toThrow(); // exitOverride
     expect(stdout).toContain(CLI_VERSION);
   });
 });

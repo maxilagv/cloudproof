@@ -50,6 +50,14 @@ export interface EphemeralPostgresSpec {
    * entorno (como una migración), no workload.
    */
   bootstrapSql?: string;
+  /**
+   * Ruta HOST-absoluta al dump SQL de la base desplegada (schema +
+   * `_prisma_migrations`) que se aplica ANTES de `migrate deploy` como
+   * génesis del seed (informe Lubrisur 2026-07, 2ª ronda: historias de
+   * migraciones irreplayables desde cero). Solo aplica en bases NO
+   * clonadas: los clones lo heredan del origen.
+   */
+  schemaBaselineSql?: string;
 }
 
 export interface SqlEffectCounters {
@@ -73,7 +81,7 @@ export interface DatabaseSchemaFingerprint {
  *  - Postgres efímero: URL de red interna de Docker (postgresql://...@<nombre>:5432/...),
  *    porque la consume la APP contenedorizada en la misma red (verify.ts la
  *    pasa como DATABASE_URL). hostConnectionUrl expone además la URL
- *    127.0.0.1:<puerto> para herramientas del host (debug, proof reproduce).
+ *    127.0.0.1:<puerto> para herramientas del host (debug, cloudproof reproduce).
  *  - App: URL http://127.0.0.1:<puerto>, porque la consume el Replayer que
  *    corre en el host.
  */

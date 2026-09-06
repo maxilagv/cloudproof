@@ -80,12 +80,12 @@ function describeError(error: unknown): string {
 }
 
 function logicalPath(rawUrl: string): string {
-  const parsed = new URL(rawUrl, "http://proof-recorder.invalid");
+  const parsed = new URL(rawUrl, "http://cloudproof-recorder.invalid");
   return parsed.pathname + parsed.search;
 }
 
 function joinBasePath(baseUrl: URL, requestPath: string): URL {
-  const requestUrl = new URL(requestPath, "http://proof-recorder.invalid");
+  const requestUrl = new URL(requestPath, "http://cloudproof-recorder.invalid");
   const target = new URL(baseUrl.toString());
   const prefix = target.pathname === "/" ? "" : target.pathname.replace(/\/$/, "");
   target.pathname = prefix + "/" + requestUrl.pathname.replace(/^\/+/, "");

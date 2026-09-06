@@ -1,7 +1,7 @@
 {
-  "name": "@proof/config",
+  "name": "@cloudproof/config",
   "version": "0.0.1",
-  "description": "defineProject() y el schema de proof.config.ts",
+  "description": "defineProject() y el schema de cloudproof.config.ts",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "./dist/index.js",

@@ -2,21 +2,21 @@ import { SpawnRunner, type CommandRunner } from "./command-runner.js";
 import { ExecutorError } from "./errors.js";
 
 /**
- * Inventario y barrido de residuos Docker de Proof.
+ * Inventario y barrido de residuos Docker de CloudProof.
  *
- * Todo contenedor y red que Proof crea lleva el label dev.proof.owner
- * (y dev.proof.run con el id de corrida). Este módulo es la única fuente
+ * Todo contenedor y red que CloudProof crea lleva el label dev.cloudproof.owner
+ * (y dev.cloudproof.run con el id de corrida). Este módulo es la única fuente
  * de verdad para encontrarlos y eliminarlos: lo consumen sweepAll() del
- * executor y el comando `proof cleanup` (con soporte --dry-run, P0 del
+ * executor y el comando `cloudproof cleanup` (con soporte --dry-run, P0 del
  * informe 2026-07-18).
  */
 
-export const OWNER_LABEL = "dev.proof.owner=proof";
+export const OWNER_LABEL = "dev.cloudproof.owner=cloudproof";
 
 export interface DockerResidue {
   id: string;
   name: string;
-  /** Valor del label dev.proof.run; ausente en recursos sin corrida asociada. */
+  /** Valor del label dev.cloudproof.run; ausente en recursos sin corrida asociada. */
   runId?: string;
 }
 
@@ -32,7 +32,7 @@ export interface SweepReport extends ResidueReport {
   failures: string[];
 }
 
-const RUN_LABEL_KEY = "dev.proof.run";
+const RUN_LABEL_KEY = "dev.cloudproof.run";
 
 function parseResidueLines(stdout: string): DockerResidue[] {
   return stdout
@@ -50,7 +50,7 @@ function parseResidueLines(stdout: string): DockerResidue[] {
     .filter((residue) => residue.id !== "");
 }
 
-/** Lista contenedores y redes de Proof sin tocarlos. Requiere daemon activo. */
+/** Lista contenedores y redes de CloudProof sin tocarlos. Requiere daemon activo. */
 export async function collectResidues(
   runner: CommandRunner = new SpawnRunner({ role: "orchestrator" }),
 ): Promise<ResidueReport> {
@@ -63,7 +63,7 @@ export async function collectResidues(
     `{{.ID}}\t{{.Names}}\t{{.Label "${RUN_LABEL_KEY}"}}`,
   ]);
   if (containers.exitCode !== 0) {
-    throw new ExecutorError("Docker no pudo listar los contenedores de Proof.", [
+    throw new ExecutorError("Docker no pudo listar los contenedores de CloudProof.", [
       containers.stderr.trim().slice(-500),
     ]);
   }
@@ -76,7 +76,7 @@ export async function collectResidues(
     `{{.ID}}\t{{.Name}}\t{{.Label "${RUN_LABEL_KEY}"}}`,
   ]);
   if (networks.exitCode !== 0) {
-    throw new ExecutorError("Docker no pudo listar las redes de Proof.", [
+    throw new ExecutorError("Docker no pudo listar las redes de CloudProof.", [
       networks.stderr.trim().slice(-500),
     ]);
   }
@@ -87,7 +87,7 @@ export async function collectResidues(
 }
 
 /**
- * Elimina (o solo lista, con dryRun) todo residuo etiquetado por Proof.
+ * Elimina (o solo lista, con dryRun) todo residuo etiquetado por CloudProof.
  * Los contenedores caen antes que las redes: una red con contenedores
  * conectados no puede eliminarse. Un recurso ya desaparecido entre el
  * listado y el rm no cuenta como fallo.

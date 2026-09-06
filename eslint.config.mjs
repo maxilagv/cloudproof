@@ -6,7 +6,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/.turbo/**",
-      "**/.proof/**",
+      "**/.cloudproof/**",
       "**/*.test.ts",
       "**/tests/**",
     ],

@@ -13,7 +13,7 @@ import {
 const roots: string[] = [];
 
 function workspace(): string {
-  const root = mkdtempSync(join(tmpdir(), "proof-bundle-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-bundle-"));
   roots.push(root);
   return root;
 }
@@ -53,7 +53,7 @@ function writeBundle(root: string): string {
 
 const silent = { writeOutput: () => {} };
 
-describe("proof bundle — keygen/sign/verify (gate 3, informe 2026-07-18)", () => {
+describe("cloudproof bundle — keygen/sign/verify (gate 3, informe 2026-07-18)", () => {
   it("roundtrip completo: keygen → sign → verify concluye TRUSTED con exit 0", () => {
     const root = workspace();
     const bundlePath = writeBundle(root);
@@ -102,7 +102,7 @@ describe("proof bundle — keygen/sign/verify (gate 3, informe 2026-07-18)", () 
     runBundleKeygen({ cwd: root, ...silent });
     runBundleSign(bundlePath, { cwd: root, ...silent });
     // Simula un consumidor sin la clave: borra el directorio de claves.
-    rmSync(join(root, ".proof", "keys"), { recursive: true, force: true });
+    rmSync(join(root, ".cloudproof", "keys"), { recursive: true, force: true });
 
     const report = runBundleVerify(bundlePath, { cwd: root, ...silent });
     expect(report.verdict).toBe("integrity-only");

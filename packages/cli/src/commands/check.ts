@@ -1,4 +1,4 @@
-import { toCheckRunSummary, publishCheckRun } from "@proof/plugin-github-actions";
+import { toCheckRunSummary, publishCheckRun } from "@cloudproof/plugin-github-actions";
 import { runReleaseVerify, type ReleaseVerifyOptions } from "./release-verify.js";
 
 /**

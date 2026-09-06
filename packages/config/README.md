@@ -1,11 +1,11 @@
-# @proof/config
+# @cloudproof/config
 
-Schema Zod y helpers de configuracion para Proof.
+Schema Zod y helpers de configuracion para CloudProof.
 
 ## Uso
 
 ```ts
-import { defineProject, nextjs, postgres } from "@proof/config";
+import { defineProject, nextjs, postgres } from "@cloudproof/config";
 
 export default defineProject({
   services: { web: nextjs("./apps/web") },
@@ -26,13 +26,13 @@ ser relativas al repo y no pueden atravesar con `..`.
 
 El orden de aislamiento es `trusted < internal < fork`.
 
-- `trusted` conserva `proof.config.ts` via jiti por compatibilidad y tambien
-  acepta `proof.config.json`.
-- `internal` y `fork` solo aceptan `proof.config.json`: importar TypeScript
+- `trusted` conserva `cloudproof.config.ts` via jiti por compatibilidad y tambien
+  acepta `cloudproof.config.json`.
+- `internal` y `fork` solo aceptan `cloudproof.config.json`: importar TypeScript
   ejecutaria codigo del checkout antes de crear el sandbox.
-- `PROOF_EXECUTION_PROFILE` selecciona el perfil; un override tipado tiene
+- `CLOUDPROOF_EXECUTION_PROFILE` selecciona el perfil; un override tipado tiene
   prioridad.
-- `PROOF_EXECUTION_PROFILE_LOCKED` fija el piso de seguridad de CI. Un override
+- `CLOUDPROOF_EXECUTION_PROFILE_LOCKED` fija el piso de seguridad de CI. Un override
   puede endurecerlo, nunca bajarlo.
 
 El JSON se limita a 1 MiB y se valida con el mismo `ProjectConfigSchema`.

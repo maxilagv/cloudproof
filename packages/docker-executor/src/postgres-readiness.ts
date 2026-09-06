@@ -44,9 +44,9 @@ export interface PostgresReadinessOptions {
 }
 
 const READINESS_DEFAULTS = {
-  user: "proof",
-  database: "proof",
-  password: "proof",
+  user: "cloudproof",
+  database: "cloudproof",
+  password: "cloudproof",
   timeoutMs: 60_000,
   pollIntervalMs: 500,
   requiredConsecutive: 2,
@@ -63,7 +63,7 @@ const READINESS_PROBE_SQL = "SELECT 1, pg_postmaster_start_time();";
  * Errores transitorios CONOCIDOS de conexión/arranque de PostgreSQL.
  * Deliberadamente NO matchea errores SQL reales (violaciones de constraint,
  * columnas inexistentes, etc.): un error de compatibilidad jamás debe
- * reintentarse — es exactamente la evidencia que Proof existe para capturar.
+ * reintentarse — es exactamente la evidencia que CloudProof existe para capturar.
  */
 export const TRANSIENT_POSTGRES_PATTERNS: readonly RegExp[] = [
   /the database system is starting up/i,

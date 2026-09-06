@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import {
   ComposeExecutor,
   SpawnRunner,
-} from "@proof/docker-executor";
+} from "@cloudproof/docker-executor";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runReleaseVerify } from "../src/commands/release-verify.js";
 import {
@@ -20,8 +20,8 @@ import {
  * obtener y persistir el bundle UNSAFE; después reproduce su assertion,
  * comprueba la app por HTTP y ejecuta la limpieza dirigida por runId.
  */
-const enabled = process.env["PROOF_DOCKER_IT"] === "1";
-const fullEnabled = process.env["PROOF_DOCKER_IT_FULL"] === "1";
+const enabled = process.env["CLOUDPROOF_DOCKER_IT"] === "1";
+const fullEnabled = process.env["CLOUDPROOF_DOCKER_IT_FULL"] === "1";
 const runner = new SpawnRunner();
 
 if (enabled) {
@@ -30,7 +30,7 @@ if (enabled) {
     .catch(() => ({ exitCode: -1, stdout: "", stderr: "docker no ejecutable" }));
   if (probe.exitCode !== 0) {
     throw new Error(
-      `PROOF_DOCKER_IT=1 pero el daemon de Docker no responde:\n${probe.stderr.slice(-500)}`,
+      `CLOUDPROOF_DOCKER_IT=1 pero el daemon de Docker no responde:\n${probe.stderr.slice(-500)}`,
     );
   }
 }
@@ -83,9 +83,9 @@ server.listen(3000, "0.0.0.0");
 `;
 
 const WORKLOAD_JS = `
-const baseUrl = process.env.PROOF_BASE_URL;
+const baseUrl = process.env.CLOUDPROOF_BASE_URL;
 if (!baseUrl) {
-  console.error("PROOF_BASE_URL no está definida");
+  console.error("CLOUDPROOF_BASE_URL no está definida");
   process.exit(1);
 }
 for (let index = 0; index < 3; index++) {
@@ -141,7 +141,7 @@ interface Fixture {
 }
 
 async function createFixture(): Promise<Fixture> {
-  const root = mkdtempSync(join(tmpdir(), "proof-reproduce-docker-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-reproduce-docker-"));
   const repo = join(root, "repo");
   mkdirSync(repo);
   writeFiles(repo, {
@@ -149,13 +149,13 @@ async function createFixture(): Promise<Fixture> {
     "server.js": SERVER_JS,
     "scripts/workload.mjs": WORKLOAD_JS,
     "package.json": JSON.stringify({
-      name: "proof-reproduce-fixture",
+      name: "cloudproof-reproduce-fixture",
       private: true,
       type: "module",
       dependencies: { pg: "8.16.3" },
       devDependencies: { prisma: "6.19.0" },
     }),
-    "proof.config.ts": `export default {
+    "cloudproof.config.ts": `export default {
   services: { api: { kind: "node", path: "." } },
   data: { main: { kind: "postgres", version: 16 } },
   flows: [],
@@ -172,8 +172,8 @@ async function createFixture(): Promise<Fixture> {
   });
 
   await command("git", ["init", "-b", "main"], repo);
-  await command("git", ["config", "user.email", "reproduce-it@proof.local"], repo);
-  await command("git", ["config", "user.name", "proof-reproduce-it"], repo);
+  await command("git", ["config", "user.email", "reproduce-it@cloudproof.local"], repo);
+  await command("git", ["config", "user.name", "cloudproof-reproduce-it"], repo);
   await command("git", ["add", "-A"], repo);
   await command("git", ["commit", "-m", "base app and schema"], repo);
   const baseSha = await command("git", ["rev-parse", "HEAD"], repo);
@@ -191,7 +191,7 @@ async function createFixture(): Promise<Fixture> {
   return { root, repo, baseSha, headSha };
 }
 
-describe.skipIf(!enabled || !fullEnabled)("proof reproduce con Docker real", () => {
+describe.skipIf(!enabled || !fullEnabled)("cloudproof reproduce con Docker real", () => {
   let fixture: Fixture;
   let reproduction: LiveReproductionResult | undefined;
   let reproductionFactory:
@@ -295,7 +295,7 @@ describe.skipIf(!enabled || !fullEnabled)("proof reproduce con Docker real", () 
       "ps",
       "-aq",
       "--filter",
-      `label=dev.proof.run=${reproduction.runId}`,
+      `label=dev.cloudproof.run=${reproduction.runId}`,
     ]);
     expect(running.stdout.trim()).not.toBe("");
 
@@ -306,7 +306,7 @@ describe.skipIf(!enabled || !fullEnabled)("proof reproduce con Docker real", () 
       "ps",
       "-aq",
       "--filter",
-      `label=dev.proof.run=${reproduction.runId}`,
+      `label=dev.cloudproof.run=${reproduction.runId}`,
     ]);
     expect(leftovers.stdout.trim()).toBe("");
     const leftoverNetworks = await runner.run("docker", [
@@ -314,7 +314,7 @@ describe.skipIf(!enabled || !fullEnabled)("proof reproduce con Docker real", () 
       "ls",
       "-q",
       "--filter",
-      `label=dev.proof.run=${reproduction.runId}`,
+      `label=dev.cloudproof.run=${reproduction.runId}`,
     ]);
     expect(leftoverNetworks.stdout.trim()).toBe("");
     reproduction = undefined;

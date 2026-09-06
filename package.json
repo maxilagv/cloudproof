@@ -1,5 +1,5 @@
 {
-  "name": "proof-monorepo",
+  "name": "cloudproof-monorepo",
   "private": true,
   "version": "0.0.1",
   "description": "Evidence Plane determinista para cambios stateful — motor Node.js/PostgreSQL/Prisma",

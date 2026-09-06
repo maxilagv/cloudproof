@@ -130,10 +130,10 @@ describe("Recorder and Replayer", () => {
     const createResponse = await fetch(proxyUrl + "/items?include=meta", {
       method: "POST",
       headers: { "content-type": "application/json", "x-test-case": "create-item" },
-      body: JSON.stringify({ name: "proof" }),
+      body: JSON.stringify({ name: "cloudproof" }),
     });
     expect(createResponse.status).toBe(201);
-    expect(await createResponse.json()).toMatchObject({ input: { name: "proof" } });
+    expect(await createResponse.json()).toMatchObject({ input: { name: "cloudproof" } });
     expect((await fetch(proxyUrl + "/health")).status).toBe(200);
 
     const exchanges = stop(recorder);
@@ -141,7 +141,7 @@ describe("Recorder and Replayer", () => {
     expect(exchanges[0]?.request).toMatchObject({
       method: "POST",
       path: "/items?include=meta",
-      body: { name: "proof" },
+      body: { name: "cloudproof" },
     });
 
     const results = await new Replayer().replay(exchanges, app.url);
@@ -252,8 +252,8 @@ describe("normalizadores (calibración gate 1.E)", () => {
       user: {
         id: "JS9rknoYLXlVrxwk4HmxmyojV0B4hxgs",
         accountId: 12345678,
-        email: "proof@example.com",
-        name: "Proof E2E",
+        email: "cloudproof@example.com",
+        name: "CloudProof E2E",
         createdAt: "2026-07-15T01:28:28.435Z",
       },
       status: "paid",
@@ -267,7 +267,7 @@ describe("normalizadores (calibración gate 1.E)", () => {
     expect(user["accountId"]).toBe("<volatile-id>");
     expect(user["createdAt"]).toBe("<timestamp>");
     // Campos de negocio intactos: un breaking change acá DEBE detectarse.
-    expect(user["email"]).toBe("proof@example.com");
+    expect(user["email"]).toBe("cloudproof@example.com");
     expect(normalized["status"]).toBe("paid");
     expect(normalized["currency"]).toBe("EUR");
     expect(normalized["amount"]).toBe(991);

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ Proof
+# 🛡️ CloudProof
 
 ### El Evidence Plane determinista para releases de software
 
@@ -19,30 +19,30 @@
 
 ---
 
-## 🧭 ¿Qué es Proof?
+## 🧭 ¿Qué es CloudProof?
 
-Proof es una capa de **evidencia**, no de tests. No reemplaza tu suite, no programa por vos y no contiene un LLM. Su única función es responder, con datos reproducibles, una pregunta que ningún test suite responde por sí sola:
+CloudProof es una capa de **evidencia**, no de tests. No reemplaza tu suite, no programa por vos y no contiene un LLM. Su única función es responder, con datos reproducibles, una pregunta que ningún test suite responde por sí sola:
 
 > **¿Esta aplicación va a seguir funcionando durante la transición real de versión y esquema — no solo después de ella?**
 
-El primer motor de Proof está afinado para el caso más peligroso y más común en producción: **Node.js / Next.js + PostgreSQL con migraciones Prisma**, atravesando un despliegue real donde código viejo y código nuevo conviven, escriben y leen sobre la misma base de datos.
+El primer motor de CloudProof está afinado para el caso más peligroso y más común en producción: **Node.js / Next.js + PostgreSQL con migraciones Prisma**, atravesando un despliegue real donde código viejo y código nuevo conviven, escriben y leen sobre la misma base de datos.
 
-> 📅 **Estado al 2026-07-18:** el fast path estático y la matriz completa A0/A1 × S0/S1, coexistencia y rollback están implementados. El readiness de Postgres usa `SELECT 1` por TCP con doble confirmación sobre el mismo postmaster, y los reintentos de lecturas transitorias quedan registrados en el Bundle (`executorAttempts`). El Bundle local (v1) ya puede firmarse y verificarse (`proof bundle keygen/sign/verify`: Ed25519 sobre payload canónico RFC 8785, encoding DSSE PAE, attestation separado). `proof check` todavía no publica un GitHub Check Run.
+> 📅 **Estado al 2026-07-18:** el fast path estático y la matriz completa A0/A1 × S0/S1, coexistencia y rollback están implementados. El readiness de Postgres usa `SELECT 1` por TCP con doble confirmación sobre el mismo postmaster, y los reintentos de lecturas transitorias quedan registrados en el Bundle (`executorAttempts`). El Bundle local (v1) ya puede firmarse y verificarse (`cloudproof bundle keygen/sign/verify`: Ed25519 sobre payload canónico RFC 8785, encoding DSSE PAE, attestation separado). `cloudproof check` todavía no publica un GitHub Check Run.
 >
 > 📄 La tesis v0.3 está en [`output/pdf/`](output/pdf/) *(no versionada — ver [🔒 Qué no se sube al repo](#-qué-no-se-sube-al-repositorio))*.
 
 ---
 
-## ✅ Qué hace bien Proof, en detalle
+## ✅ Qué hace bien CloudProof, en detalle
 
 ### 1. Separa "clasificar el riesgo" de "demostrarlo"
 
 ```sh
 # L0/L1 — clasifica el diff sin Docker ni workload real
-proof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
+cloudproof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
 
 # L2 — ejecuta la evidencia dinámica de transición
-proof release verify --base-sha <deployed-sha> --head-sha <candidate-sha>
+cloudproof release verify --base-sha <deployed-sha> --head-sha <candidate-sha>
 ```
 
 `release plan` corre con presupuesto acotado e inspecciona Git, configuración, historial de migraciones, Prisma, SQL, build, dependencias, runtime y CI. Su veredicto **siempre** es `PLAN_ONLY_NOT_VERIFIED`: elige el siguiente nivel de evidencia necesario, pero jamás se hace pasar por una demostración de seguridad. Es una decisión de diseño deliberada: el análisis estático no puede — y no debería — declararse a sí mismo suficiente.
@@ -65,38 +65,38 @@ Los findings de Prisma salen de un **diff semántico de modelos y campos parsead
 
 El resultado final es siempre uno de tres: **`VERIFIED`**, **`UNSAFE`** o **`INCONCLUSIVE`** — nunca un color verde ambiguo. Cada veredicto viene acompañado de coverage, provenance, assertions individuales, `remediation` determinista y `nextActions` tipadas y accionables. `INCONCLUSIVE` está diseñado para **no** poder confundirse con "seguro": una aprobación final sigue siendo, siempre, una decisión humana.
 
-La matriz es **adaptativa pero fail-closed**. Si el diff toca migraciones, Prisma, SQL, una superficie de riesgo alto o el análisis queda incompleto, se ejecutan todas las celdas anteriores. Si el diff es exclusivamente de aplicación y el schema diff es cero, el plan exige una matriz enfocada (`BUILD_A0`, `BUILD_A1`, `A0_S0`, `A1_S0`, `SQL_EFFECTS`): no repite S0 como si fuera un S1 distinto. El Bundle registra `matrix=TARGETED_RELEASE_MATRIX` y la assertion `proof.execution-complete` enumera por qué las celdas de migración/coexistencia/rollback no eran obligatorias.
+La matriz es **adaptativa pero fail-closed**. Si el diff toca migraciones, Prisma, SQL, una superficie de riesgo alto o el análisis queda incompleto, se ejecutan todas las celdas anteriores. Si el diff es exclusivamente de aplicación y el schema diff es cero, el plan exige una matriz enfocada (`BUILD_A0`, `BUILD_A1`, `A0_S0`, `A1_S0`, `SQL_EFFECTS`): no repite S0 como si fuera un S1 distinto. El Bundle registra `matrix=TARGETED_RELEASE_MATRIX` y la assertion `cloudproof.execution-complete` enumera por qué las celdas de migración/coexistencia/rollback no eran obligatorias.
 
-Coverage también es consciente del cambio. Proof deriva rutas de entrypoints modificados (por ahora Next.js App Router y Pages API), extrae sus métodos y cruza esa superficie con el tráfico capturado. Una configuración puede cubrir `2/2` rutas declaradas y aun así terminar `INCONCLUSIVE` si el endpoint realmente modificado recibió cero tráfico; `coverage.changedRoutesMissing` y una assertion `coverage.changed-route.*` hacen visible esa diferencia.
+Coverage también es consciente del cambio. CloudProof deriva rutas de entrypoints modificados (por ahora Next.js App Router y Pages API), extrae sus métodos y cruza esa superficie con el tráfico capturado. Una configuración puede cubrir `2/2` rutas declaradas y aun así terminar `INCONCLUSIVE` si el endpoint realmente modificado recibió cero tráfico; `coverage.changedRoutesMissing` y una assertion `coverage.changed-route.*` hacen visible esa diferencia.
 
 ### 3. Genera su propio workload cuando el repo no tiene uno
 
-Si el repositorio no declara un script e2e, `proof init` busca un spec OpenAPI 3.x (`openapi.json`/`.yaml` en `docs/`, `api/`, `openapi/` y variantes) y sintetiza `proof.workload.mjs`: lecturas primero, escrituras después, y una repetición final de lecturas — exactamente el *tail* read-only que el rollback necesita observar para ser evaluado. Los cuerpos de request salen de los schemas del spec en orden de prioridad `example > default > enum > tipo`, con datos únicos por corrida vía placeholder `{{RUN}}`. Las rutas cubiertas se declaran de forma determinista en `coverage.requiredRoutes` y `coverage.rollbackProbeRoutes`.
+Si el repositorio no declara un script e2e, `cloudproof init` busca un spec OpenAPI 3.x (`openapi.json`/`.yaml` en `docs/`, `api/`, `openapi/` y variantes) y sintetiza `cloudproof.workload.mjs`: lecturas primero, escrituras después, y una repetición final de lecturas — exactamente el *tail* read-only que el rollback necesita observar para ser evaluado. Los cuerpos de request salen de los schemas del spec en orden de prioridad `example > default > enum > tipo`, con datos únicos por corrida vía placeholder `{{RUN}}`. Las rutas cubiertas se declaran de forma determinista en `coverage.requiredRoutes` y `coverage.rollbackProbeRoutes`.
 
-Todo hueco de cobertura — operaciones con auth, cuerpos no-JSON, parámetros sintéticos — se reporta explícitamente como *gap* en la salida de `proof init`. Nunca se rellena con datos mágicos. El script generado es un punto de partida editable, no una caja negra.
+Todo hueco de cobertura — operaciones con auth, cuerpos no-JSON, parámetros sintéticos — se reporta explícitamente como *gap* en la salida de `cloudproof init`. Nunca se rellena con datos mágicos. El script generado es un punto de partida editable, no una caja negra.
 
 ### 4. Fixtures deterministas para identidad y estado previo
 
 ```ts
 fixtures: {
-  beforeAll: { command: "node", args: ["scripts/proof-fixtures.mjs"] },
+  beforeAll: { command: "node", args: ["scripts/cloudproof-fixtures.mjs"] },
 },
 ```
 
-- Corre **antes** del workload, contra el mismo `PROOF_BASE_URL` (el proxy de captura de Proof), así que sus intercambios HTTP quedan grabados como **prefijo replayable**: cada celda de la matriz recrea la misma identidad y los mismos datos al hacer replay, sin acceso privilegiado a la base de datos.
-- Puede entregarle variables al workload (por ejemplo, un token) escribiendo líneas `KEY=VALUE` en el archivo apuntado por `PROOF_FIXTURE_ENV`. El Bundle final solo conserva los **nombres** de esas variables, nunca los valores — los secretos no viajan al artefacto de evidencia.
+- Corre **antes** del workload, contra el mismo `CLOUDPROOF_BASE_URL` (el proxy de captura de CloudProof), así que sus intercambios HTTP quedan grabados como **prefijo replayable**: cada celda de la matriz recrea la misma identidad y los mismos datos al hacer replay, sin acceso privilegiado a la base de datos.
+- Puede entregarle variables al workload (por ejemplo, un token) escribiendo líneas `KEY=VALUE` en el archivo apuntado por `CLOUDPROOF_FIXTURE_ENV`. El Bundle final solo conserva los **nombres** de esas variables, nunca los valores — los secretos no viajan al artefacto de evidencia.
 - Si el fixture falla, el veredicto es honestamente `INCONCLUSIVE`, con la assertion `workload.fixtures` y una `nextAction` accionable. El workload ni siquiera se ejecuta.
 - No existe `afterAll` a propósito: los entornos son efímeros y el executor los destruye siempre.
 
-Para apps **sin registro público** (el primer usuario no puede crearse por HTTP), `fixtures.bootstrapSql` declara un `.sql` del repo que Proof aplica una sola vez, dentro del contenedor Postgres, después de `migrate deploy` del commit base y antes de arrancar cualquier app. Es preparación de entorno — análoga a una migración — así que la regla "las escrituras del workload son HTTP observables" queda intacta: todas las celdas heredan el bootstrap por clonación del seed S0 y su digest sha256 queda en el Bundle (`postgres.bootstrap`). El patrón completo: sembrar el usuario con un hash literal en el SQL y obtener el token con el login HTTP real en `fixtures.beforeAll`. Y para el onboarding a Docker — el candidato agrega el Dockerfile que el commit base desplegado no tiene — `services.<n>.dockerfileFrom: "head"` construye ambos lados con la receta del candidato manteniendo las fuentes de cada commit; la procedencia queda registrada en la evidencia de `BUILD_A0`.
+Para apps **sin registro público** (el primer usuario no puede crearse por HTTP), `fixtures.bootstrapSql` declara un `.sql` del repo que CloudProof aplica una sola vez, dentro del contenedor Postgres, después de `migrate deploy` del commit base y antes de arrancar cualquier app. Es preparación de entorno — análoga a una migración — así que la regla "las escrituras del workload son HTTP observables" queda intacta: todas las celdas heredan el bootstrap por clonación del seed S0 y su digest sha256 queda en el Bundle (`postgres.bootstrap`). El patrón completo: sembrar el usuario con un hash literal en el SQL y obtener el token con el login HTTP real en `fixtures.beforeAll`. Y para el onboarding a Docker — el candidato agrega el Dockerfile que el commit base desplegado no tiene — `services.<n>.dockerfileFrom: "head"` construye ambos lados con la receta del candidato manteniendo las fuentes de cada commit; la procedencia queda registrada en la evidencia de `BUILD_A0`.
 
 ### 5. Bundles firmados, no solo logs
 
-`proof bundle keygen/sign/verify/inspect` firma el payload canónico (RFC 8785) con Ed25519, usando encoding DSSE PAE y un attestation separado del payload. Sin clave pública configurada, Proof reporta **integridad** (el bundle no fue alterado) — nunca **confianza** (que el firmante sea quien decís que es). Esa distinción es explícita en el diseño, no un detalle de implementación.
+`cloudproof bundle keygen/sign/verify/inspect` firma el payload canónico (RFC 8785) con Ed25519, usando encoding DSSE PAE y un attestation separado del payload. Sin clave pública configurada, CloudProof reporta **integridad** (el bundle no fue alterado) — nunca **confianza** (que el firmante sea quien decís que es). Esa distinción es explícita en el diseño, no un detalle de implementación.
 
-### 6. `proof doctor`: falla rápido y con motivo
+### 6. `cloudproof doctor`: falla rápido y con motivo
 
-Valida runtime, Docker, espacio en disco, historial de Git, secretos versionados por error, configuración, workload, coverage y approvals declaradas. Las variables ausentes de `.env.example` se clasifican por evidencia de uso: lecturas requeridas con archivo/línea primero, usos condicionales después y claves no referenciadas como un resumen sin volcar una lista ruidosa. `env.required`/`env.optional` permite corregir explícitamente la heurística. Incluye además un preflight estático de runtime de imagen — si el servicio usa Prisma y la etapa final del Dockerfile es Alpine o Debian slim sin OpenSSL, el problema aparece acá con la receta exacta (`apk add --no-cache openssl` / `apt-get install openssl`), no a los minutos de un build fallido; el análisis entiende multi-stage y solo cuenta lo que llega a la imagen final. También vigila que `.proof/` esté ignorado (evidencia versionada en Git es `HIGH`) y avisa cuando el spec OpenAPI exige identidad sin `fixtures.beforeAll`. Devuelve código de salida `1` en cuanto encuentra un problema `HIGH` o `CRITICAL` — pensado para bloquear CI antes de gastar tiempo en levantar contenedores.
+Valida runtime, Docker, espacio en disco, historial de Git, secretos versionados por error, configuración, workload, coverage y approvals declaradas. Las variables ausentes de `.env.example` se clasifican por evidencia de uso: lecturas requeridas con archivo/línea primero, usos condicionales después y claves no referenciadas como un resumen sin volcar una lista ruidosa. `env.required`/`env.optional` permite corregir explícitamente la heurística. Incluye además un preflight estático de runtime de imagen — si el servicio usa Prisma y la etapa final del Dockerfile es Alpine o Debian slim sin OpenSSL, el problema aparece acá con la receta exacta (`apk add --no-cache openssl` / `apt-get install openssl`), no a los minutos de un build fallido; el análisis entiende multi-stage y solo cuenta lo que llega a la imagen final. También vigila que `.cloudproof/` esté ignorado (evidencia versionada en Git es `HIGH`) y avisa cuando el spec OpenAPI exige identidad sin `fixtures.beforeAll`. Devuelve código de salida `1` en cuanto encuentra un problema `HIGH` o `CRITICAL` — pensado para bloquear CI antes de gastar tiempo en levantar contenedores.
 
 ### 7. Perfiles endurecidos para código no confiable
 
@@ -109,8 +109,8 @@ Para repos que no controlás por completo, existen los perfiles `internal` y `fo
 Requisitos: **Node.js 20+**, **Git** y **Docker** con el daemon activo.
 
 ```sh
-git clone https://github.com/splayercloud/proof
-cd proof
+git clone https://github.com/<tu-org>/cloudproof
+cd cloudproof
 corepack enable
 pnpm run setup
 ```
@@ -118,12 +118,12 @@ pnpm run setup
 En un repositorio objetivo:
 
 ```sh
-proof init      # detecta stack, genera config + instrucciones para agentes
-proof doctor    # valida el entorno antes de gastar tiempo de Docker
-proof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
+cloudproof init      # detecta stack, genera config + instrucciones para agentes
+cloudproof doctor    # valida el entorno antes de gastar tiempo de Docker
+cloudproof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
 ```
 
-`proof init` respeta `.gitignore`, detecta servicios construibles, distingue Node.js de Next.js, y genera `proof.config.ts`, `proof.config.json` y un bloque gestionado dentro de `AGENTS.md`. El código generado nunca se confunde con un servicio: los `output` de los generators Prisma y los directorios `generated`/`__generated__` se excluyen y cada descarte se reporta con su evidencia (el cliente Prisma emitido en `src/generated/prisma` trae su propio `package.json` y una copia de `schema.prisma`, pero no es una aplicación). Además `init` agrega `.proof/` a `.gitignore` de forma idempotente y, si el spec OpenAPI declara operaciones autenticadas con un login público que devuelve token, scaffoldea `proof.fixtures.mjs` (identidad vía `PROOF_BASE_URL`, token exportado por `PROOF_FIXTURE_ENV`); sin esa evidencia, reporta el gap en lugar de inventar rutas.
+`cloudproof init` respeta `.gitignore`, detecta servicios construibles, distingue Node.js de Next.js, y genera `cloudproof.config.ts`, `cloudproof.config.json` y un bloque gestionado dentro de `AGENTS.md`. El código generado nunca se confunde con un servicio: los `output` de los generators Prisma y los directorios `generated`/`__generated__` se excluyen y cada descarte se reporta con su evidencia (el cliente Prisma emitido en `src/generated/prisma` trae su propio `package.json` y una copia de `schema.prisma`, pero no es una aplicación). Además `init` agrega `.cloudproof/` a `.gitignore` de forma idempotente y, si el spec OpenAPI declara operaciones autenticadas con un login público que devuelve token, scaffoldea `cloudproof.fixtures.mjs` (identidad vía `CLOUDPROOF_BASE_URL`, token exportado por `CLOUDPROOF_FIXTURE_ENV`); sin esa evidencia, reporta el gap en lugar de inventar rutas.
 
 ### Configuración mínima
 
@@ -153,7 +153,7 @@ export default {
 
 Cada servicio también admite `dockerfile`, `buildContext`, `buildArgs`, `env`, `prismaSchema` y `readinessTimeoutMs`. En monorepos con varios servicios, `--service <nombre>` es obligatorio.
 
-El workload recibe `PROOF_BASE_URL` y debe conducir la aplicación por HTTP. **Nunca recibe `DATABASE_URL`**: el recorder necesita poder atribuir cada escritura a una ruta HTTP concreta, y el workload no debe poder mutar la base por fuera de la superficie observada.
+El workload recibe `CLOUDPROOF_BASE_URL` y debe conducir la aplicación por HTTP. **Nunca recibe `DATABASE_URL`**: el recorder necesita poder atribuir cada escritura a una ruta HTTP concreta, y el workload no debe poder mutar la base por fuera de la superficie observada.
 
 > ⚠️ **Límite conocido:** la autenticación *stateless* (JWT firmado con el secreto declarado en `services.<n>.env`) replayea correctamente. Las sesiones con token aleatorio persistido en base todavía pueden divergir en el replay y no están soportadas hoy.
 
@@ -163,25 +163,25 @@ El workload recibe `PROOF_BASE_URL` y debe conducir la aplicación por HTTP. **N
 
 | Comando | Estado actual |
 |---|---|
-| `proof init` | Detecta stack/servicios, genera configuración + instrucciones para agentes; sin e2e propio, genera un workload desde OpenAPI con coverage real |
-| `proof doctor` | Valida runtime, Docker, disco, historial Git, secretos versionados, config, workload, coverage y approvals |
-| `proof release plan` | Fast path estático; planifica y **nunca** emite `VERIFIED` |
-| `proof release verify` | Ejecuta la matriz completa, coexistencia y rollback; imprime celda por celda y genera el Proof Bundle |
-| `proof reproduce <id>` | Reconstruye un exchange puntual o vuelve a ejecutar una etapa completa |
-| `proof cleanup` | Elimina contenedores/redes residuales de Proof (`--dry-run` lista sin tocar nada) |
-| `proof bundle keygen/sign/verify/inspect` | Firma Ed25519 del payload canónico y su verificación |
-| `proof mcp serve` | Expone `plan`/`verify`/`reproduce` por MCP stdio, para que un agente los invoque directamente |
-| `proof check` | Stub explícito — la publicación de un GitHub Check Run todavía no está implementada |
+| `cloudproof init` | Detecta stack/servicios, genera configuración + instrucciones para agentes; sin e2e propio, genera un workload desde OpenAPI con coverage real |
+| `cloudproof doctor` | Valida runtime, Docker, disco, historial Git, secretos versionados, config, workload, coverage y approvals |
+| `cloudproof release plan` | Fast path estático; planifica y **nunca** emite `VERIFIED` |
+| `cloudproof release verify` | Ejecuta la matriz completa, coexistencia y rollback; imprime celda por celda y genera el CloudProof Bundle |
+| `cloudproof reproduce <id>` | Reconstruye un exchange puntual o vuelve a ejecutar una etapa completa |
+| `cloudproof cleanup` | Elimina contenedores/redes residuales de CloudProof (`--dry-run` lista sin tocar nada) |
+| `cloudproof bundle keygen/sign/verify/inspect` | Firma Ed25519 del payload canónico y su verificación |
+| `cloudproof mcp serve` | Expone `plan`/`verify`/`reproduce` por MCP stdio, para que un agente los invoque directamente |
+| `cloudproof check` | Stub explícito — la publicación de un GitHub Check Run todavía no está implementada |
 
-Los bundles se guardan en `.proof/` (excluido del repo — ver `.gitignore`).
+Los bundles se guardan en `.cloudproof/` (excluido del repo — ver `.gitignore`).
 
 ---
 
 ## 🗺️ Roadmap: el camino a estándar multi-stack
 
-El motor actual de Proof está deliberadamente acotado a **TypeScript/Next.js + PostgreSQL + Prisma** porque probar la matriz de transición a fondo en un solo stack, antes de generalizar, es lo que hace que la evidencia sea confiable en primer lugar. Esa decisión es temporal, no arquitectónica: el core (`docker-executor`, `http-recorder`, `policy-engine`, `postgres-verifier`, `proof-schema`) ya está separado del detector de stack vía `@proof/plugin-sdk`, y cada integración de lenguaje/framework/base de datos vive como plugin independiente (`plugins/node`, `plugins/postgres`, `plugins/prisma`, `plugins/github-actions`).
+El motor actual de CloudProof está deliberadamente acotado a **TypeScript/Next.js + PostgreSQL + Prisma** porque probar la matriz de transición a fondo en un solo stack, antes de generalizar, es lo que hace que la evidencia sea confiable en primer lugar. Esa decisión es temporal, no arquitectónica: el core (`docker-executor`, `http-recorder`, `policy-engine`, `postgres-verifier`, `cloudproof-schema`) ya está separado del detector de stack vía `@cloudproof/plugin-sdk`, y cada integración de lenguaje/framework/base de datos vive como plugin independiente (`plugins/node`, `plugins/postgres`, `plugins/prisma`, `plugins/github-actions`).
 
-La intención declarada del proyecto es que Proof se convierta en el **estándar del Evidence Plane para cualquier stack backend con estado**, no solo para el ecosistema Node.js:
+La intención declarada del proyecto es que CloudProof se convierta en el **estándar del Evidence Plane para cualquier stack backend con estado**, no solo para el ecosistema Node.js:
 
 | Stack | Estado |
 |---|---|
@@ -196,11 +196,11 @@ Cada nuevo stack implica, como mínimo: un detector de servicio (`plugin-sdk`), 
 
 ## 🚫 Límites deliberados
 
-Proof no intenta adivinar invariantes de negocio. *"Dos períodos no pueden abrirse simultáneamente"* o *"el ciclo de sueldos debe devolver 422"* son tests que el agente o el equipo tienen que escribir; Proof los convierte en workload y los reejecuta a través de la transición completa.
+CloudProof no intenta adivinar invariantes de negocio. *"Dos períodos no pueden abrirse simultáneamente"* o *"el ciclo de sueldos debe devolver 422"* son tests que el agente o el equipo tienen que escribir; CloudProof los convierte en workload y los reejecuta a través de la transición completa.
 
-Tampoco reemplaza un linter completo de migraciones como Atlas. El fast path consume y clasifica evidencia estática; lo que diferencia a Proof es unir esa evidencia con evidencia **dinámica** de qué versiones, datos, flujos y escrituras se ejecutaron realmente.
+Tampoco reemplaza un linter completo de migraciones como Atlas. El fast path consume y clasifica evidencia estática; lo que diferencia a CloudProof es unir esa evidencia con evidencia **dinámica** de qué versiones, datos, flujos y escrituras se ejecutaron realmente.
 
-Un release publicado sigue usando dos commits: el SHA desplegado y el candidato. Para iterar sin crear commits descartables, `proof release plan|verify --base-sha <deployed> --worktree` congela el contenido visible —incluidos archivos no trackeados y no ignorados— mediante un índice temporal y `git commit-tree`. No mueve `HEAD`, no toca el staging ni dispara hooks; el SHA sintético es inmutable y reutilizable por cache. El Bundle lo declara como `candidate.source=synthetic-worktree-commit` y `developmentOnly=true`: demuestra ese snapshot exacto para desarrollo, pero no autoriza por sí solo un merge/deploy. El gate final debe verificar el commit publicado.
+Un release publicado sigue usando dos commits: el SHA desplegado y el candidato. Para iterar sin crear commits descartables, `cloudproof release plan|verify --base-sha <deployed> --worktree` congela el contenido visible —incluidos archivos no trackeados y no ignorados— mediante un índice temporal y `git commit-tree`. No mueve `HEAD`, no toca el staging ni dispara hooks; el SHA sintético es inmutable y reutilizable por cache. El Bundle lo declara como `candidate.source=synthetic-worktree-commit` y `developmentOnly=true`: demuestra ese snapshot exacto para desarrollo, pero no autoriza por sí solo un merge/deploy. El gate final debe verificar el commit publicado.
 
 ---
 
@@ -210,7 +210,7 @@ Este repositorio versiona código, configuración y documentación técnica — 
 
 - `output/` y `tmp/` — PDFs, renders y artefactos generados (p. ej. la tesis del proyecto)
 - `*.pdf`, `*.docx`, `*.pptx`, `*.xlsx` y binarios de oficina en cualquier ubicación fuera de `docs/`
-- `.proof/` — bundles de evidencia generados en ejecuciones locales
+- `.cloudproof/` — bundles de evidencia generados en ejecuciones locales
 - `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx` — secretos y credenciales
 - `.turbo/`, `.turbo-evaluation/`, `dist/`, `coverage/` — caches y builds reproducibles
 
@@ -235,9 +235,9 @@ pnpm test
 
 ## 📄 Licencia
 
-Proof **no** es software libre ni de código abierto. Se distribuye bajo la
-**Proof Restricted Use License**, una licencia propietaria que autoriza
-usar Proof como producto terminado (CLI, servidor MCP) pero **prohíbe**:
+CloudProof **no** es software libre ni de código abierto. Se distribuye bajo la
+**CloudProof Restricted Use License**, una licencia propietaria que autoriza
+usar CloudProof como producto terminado (CLI, servidor MCP) pero **prohíbe**:
 modificarlo, redistribuirlo, ofrecerlo como servicio a terceros, crear
 obras derivadas, o usar su código/documentación para construir un
 producto competidor. El código es visible por transparencia y auditoría,
@@ -248,6 +248,6 @@ ampliado, contactar a través de los canales del repositorio.
 
 <div align="center">
 
-*Proof no te dice que confíes. Te da la evidencia para decidir.*
+*CloudProof no te dice que confíes. Te da la evidencia para decidir.*
 
 </div>

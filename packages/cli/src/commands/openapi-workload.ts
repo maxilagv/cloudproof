@@ -5,10 +5,10 @@ import { parse as parseYaml } from "yaml";
 /**
  * Generación de workloads desde OpenAPI (informe 2026-07-18, gate 2 —
  * "el ítem P1 de mayor apalancamiento"). Traduce un spec OpenAPI 3.x a un
- * script Node autocontenido que conduce la app por PROOF_BASE_URL:
+ * script Node autocontenido que conduce la app por CLOUDPROOF_BASE_URL:
  * lecturas primero, escrituras después y una repetición de lecturas al
  * final — así siempre existen probes read-only posteriores a la última
- * escritura, que es lo que el rollback de Proof necesita.
+ * escritura, que es lo que el rollback de CloudProof necesita.
  *
  * Principios:
  *  - Nada se inventa sin evidencia: los cuerpos salen de los schemas del
@@ -172,7 +172,7 @@ export function exampleFromSchema(
     case "string":
       switch (schema.format) {
         case "email":
-          return "proof-{{RUN}}@example.com";
+          return "cloudproof-{{RUN}}@example.com";
         case "date-time":
           return "2026-01-01T00:00:00.000Z";
         case "date":
@@ -180,9 +180,9 @@ export function exampleFromSchema(
         case "uuid":
           return "00000000-0000-4000-8000-000000000000";
         case "uri":
-          return "https://example.com/proof";
+          return "https://example.com/cloudproof";
         default:
-          return "proof-{{RUN}}";
+          return "cloudproof-{{RUN}}";
       }
     default:
       return schema.properties !== undefined
@@ -211,7 +211,7 @@ function parameterValue(document: OpenApiDocument, parameter: Record<string, unk
     if (Array.isArray(schema.enum) && schema.enum.length > 0) return String(schema.enum[0]);
     if (schema.type === "integer" || schema.type === "number") return "1";
   }
-  return "proof-e2e";
+  return "cloudproof-e2e";
 }
 
 export function planWorkloadFromOpenApi(
@@ -323,7 +323,7 @@ export function planWorkloadFromOpenApi(
 
   if (authOperations > 0) {
     gaps.push(
-      `${authOperations} operación(es) declaran seguridad: configurá fixtures.beforeAll para crear la identidad y exportar AUTH_TOKEN vía PROOF_FIXTURE_ENV; el script lo envía como Bearer si está presente.`,
+      `${authOperations} operación(es) declaran seguridad: configurá fixtures.beforeAll para crear la identidad y exportar AUTH_TOKEN vía CLOUDPROOF_FIXTURE_ENV; el script lo envía como Bearer si está presente.`,
     );
   }
   if (syntheticPathParams) {
@@ -333,7 +333,7 @@ export function planWorkloadFromOpenApi(
   }
   if (writes.length === 0) {
     gaps.push(
-      "El spec no declara escrituras JSON ejecutables; sin escrituras observables Proof será honestamente INCONCLUSIVE.",
+      "El spec no declara escrituras JSON ejecutables; sin escrituras observables CloudProof será honestamente INCONCLUSIVE.",
     );
   }
   if (skippedNonJson > 0 && !gaps.some((gap) => gap.includes("no es JSON"))) {
@@ -347,18 +347,18 @@ export function planWorkloadFromOpenApi(
   return { specPath, steps, requiredRoutes, rollbackProbeRoutes, gaps };
 }
 
-/** Script Node autocontenido; el único contrato es PROOF_BASE_URL. */
+/** Script Node autocontenido; el único contrato es CLOUDPROOF_BASE_URL. */
 export function renderWorkloadScript(plan: OpenApiWorkloadPlan): string {
   return `#!/usr/bin/env node
-// Generado por "proof init" desde ${plan.specPath}.
-// Es un punto de partida EDITABLE: Proof reejecuta este workload vía
-// PROOF_BASE_URL y compara respuestas y efectos SQL entre versiones.
+// Generado por "cloudproof init" desde ${plan.specPath}.
+// Es un punto de partida EDITABLE: CloudProof reejecuta este workload vía
+// CLOUDPROOF_BASE_URL y compara respuestas y efectos SQL entre versiones.
 // Agregá aserciones de negocio y datos realistas cuando quieras — mantené
-// las rutas alineadas con coverage.requiredRoutes de proof.config.ts.
+// las rutas alineadas con coverage.requiredRoutes de cloudproof.config.ts.
 
-const base = process.env.PROOF_BASE_URL;
+const base = process.env.CLOUDPROOF_BASE_URL;
 if (base === undefined || base === "") {
-  console.error("PROOF_BASE_URL es obligatorio (lo inyecta proof release verify).");
+  console.error("CLOUDPROOF_BASE_URL es obligatorio (lo inyecta cloudproof release verify).");
   process.exit(1);
 }
 
@@ -374,7 +374,7 @@ const unique = (value) => {
   return value;
 };
 
-// Handoff de fixtures.beforeAll (si está declarado en proof.config.ts).
+// Handoff de fixtures.beforeAll (si está declarado en cloudproof.config.ts).
 const authToken = process.env.AUTH_TOKEN;
 
 let serverErrors = 0;

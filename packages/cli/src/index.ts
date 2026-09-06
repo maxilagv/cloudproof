@@ -3,7 +3,7 @@ import { buildProgram, CLI_VERSION } from "./program.js";
 import { paint, symbols, welcome } from "./ui.js";
 
 /**
- * Entry point del binario `proof`. `proof` sin argumentos muestra la
+ * Entry point del binario `cloudproof`. `cloudproof` sin argumentos muestra la
  * bienvenida (banner + comandos + próximos pasos) en vez del error seco
  * de "missing command" — primera experiencia de la tesis 6.3.
  */

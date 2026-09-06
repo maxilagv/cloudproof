@@ -144,7 +144,7 @@ export function encodeBody(
 }
 
 function headerSqlErrors(headers: IncomingHttpHeaders | Record<string, string>): string[] {
-  const value = headerValue(headers, "x-proof-sql-errors") ?? headerValue(headers, "x-proof-sql-error");
+  const value = headerValue(headers, "x-cloudproof-sql-errors") ?? headerValue(headers, "x-cloudproof-sql-error");
   if (value === undefined || value.trim() === "") {
     return [];
   }

@@ -90,7 +90,7 @@ export const ServiceSchema = z.object({
    */
   buildContext: RepoRelativePathSchema.optional(),
   /**
-   * --build-arg para la imagen (ej. { SELF_HOSTED: "true" }). `proof init`
+   * --build-arg para la imagen (ej. { SELF_HOSTED: "true" }). `cloudproof init`
    * los adopta automáticamente del docker-compose del repo cuando ese
    * compose construye el mismo Dockerfile.
    */
@@ -98,7 +98,7 @@ export const ServiceSchema = z.object({
   /**
    * Variables de entorno de RUNTIME para el contenedor de la app (el
    * equivalente al env_file del docker-compose del repo). DATABASE_URL y
-   * PORT los fija Proof y no pueden sobrescribirse desde acá.
+   * PORT los fija CloudProof y no pueden sobrescribirse desde acá.
    */
   env: z.record(EnvironmentNameSchema, EnvironmentValueSchema).optional(),
   /**
@@ -121,7 +121,31 @@ export const DataKindSchema = z.enum(["postgres", "redis"]);
 export const DataSourceSchema = z.object({
   kind: DataKindSchema,
   version: z.number().int().positive().max(1_000).optional(),
-}).strict();
+  /**
+   * Génesis alternativa de S0 (informe Lubrisur 2026-07, 2ª ronda): un .sql
+   * del repo con el dump de la base DESPLEGADA — schema + contenido de la
+   * tabla `_prisma_migrations` — para repos cuya historia de migraciones no
+   * se reconstruye desde cero (migraciones editadas después de aplicadas,
+   * `db push`, `migrate resolve`). CloudProof aplica este dump al seed S0
+   * ANTES de `migrate deploy`; Prisma entonces aplica solo las migraciones
+   * que producción aún no registró — la MISMA transición que ejecutará el
+   * deploy real. Generarlo:
+   *   pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges
+   *   pg_dump "$DATABASE_URL" --data-only --table=_prisma_migrations --no-owner --no-privileges
+   * Sin `_prisma_migrations` el archivo se rechaza antes de gastar Docker.
+   * El digest sha256 queda en la evidencia del Bundle: la corrida declara
+   * explícitamente que S0 nació de un baseline y no de un replay completo.
+   */
+  schemaBaseline: RepoRelativePathSchema.optional(),
+}).strict().superRefine((data, context) => {
+  if (data.kind !== "postgres" && data.schemaBaseline !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["schemaBaseline"],
+      message: "schemaBaseline solo aplica a data sources con kind \"postgres\".",
+    });
+  }
+});
 
 export const ReleaseStrategySchema = z.enum(["migration-first"]);
 export const RollbackStrategySchema = z.enum(["application"]);
@@ -133,8 +157,8 @@ export const ReleaseConfigSchema = z.object({
 
 /**
  * "Tests existentes como workload" (tesis 19.1): el comando que corre la
- * suite del usuario contra la app base durante release verify. Proof le
- * inyecta PROOF_BASE_URL con la URL del proxy de captura — la suite debe
+ * suite del usuario contra la app base durante release verify. CloudProof le
+ * inyecta CLOUDPROOF_BASE_URL con la URL del proxy de captura — la suite debe
  * usar esa URL como base. Comando + args explícitos (sin shell) para ser
  * portable entre Windows y POSIX sin quoting frágil.
  */
@@ -162,15 +186,15 @@ export const WorkloadConfigSchema = z.object({
 
 /**
  * Fixtures HTTP (informe 2026-07-18, gate 2): preparación de identidad y
- * datos ANTES del workload, siempre a través de PROOF_BASE_URL — el mismo
+ * datos ANTES del workload, siempre a través de CLOUDPROOF_BASE_URL — el mismo
  * proxy de captura. Sus exchanges quedan grabados como prefijo replayable,
  * así cada celda de la matriz recrea la misma identidad/datos al hacer
  * replay. `beforeAll` puede exportar variables (p.ej. un token) escribiendo
- * líneas KEY=VALUE en el archivo apuntado por PROOF_FIXTURE_ENV; el workload
+ * líneas KEY=VALUE en el archivo apuntado por CLOUDPROOF_FIXTURE_ENV; el workload
  * las recibe en su entorno. No recibe DATABASE_URL: mutar por fuera de la
  * superficie HTTP observada rompería la atribución del replay.
  *
- * No existe `afterAll` a propósito: los entornos de Proof son efímeros y el
+ * No existe `afterAll` a propósito: los entornos de CloudProof son efímeros y el
  * executor los destruye; la limpieza es responsabilidad del plano de
  * ejecución, no del workload.
  */
@@ -181,7 +205,7 @@ export const FixturesConfigSchema = z
      * Bootstrap SQL de identidad/datos de referencia (informe Bs As
      * Neumáticos 2026-07: apps con rutas autenticadas y SIN signup público
      * no tenían forma legítima de crear el primer usuario). Es un archivo
-     * .sql del repo que Proof aplica UNA vez por corrida, dentro del
+     * .sql del repo que CloudProof aplica UNA vez por corrida, dentro del
      * contenedor Postgres, después de `migrate deploy` del commit base y
      * ANTES de arrancar cualquier app: forma parte de la preparación del
      * entorno (como una migración), no del workload — la regla "las
@@ -201,7 +225,7 @@ export const CoverageConfigSchema = z.object({
     .min(1)
     .max(2_000),
   /**
-   * Lecturas idempotentes capturadas después de la última escritura. Proof
+   * Lecturas idempotentes capturadas después de la última escritura. CloudProof
    * las ejecuta exactamente una vez con A0 después de escrituras de A1.
    * Si se omite, intenta derivarlas del tail del workload y falla cerrado si
    * no existe ninguna.
@@ -215,7 +239,7 @@ export const CoverageConfigSchema = z.object({
 
 /**
  * Override explícito de la clasificación de variables de entorno que
- * `proof doctor` infiere del código (required = la app la asume presente;
+ * `cloudproof doctor` infiere del código (required = la app la asume presente;
  * optional = módulo condicional, ej. ARCA o WhatsApp). El repo sabe más que
  * cualquier heurística: lo declarado acá gana siempre sobre lo inferido.
  */
@@ -234,7 +258,7 @@ export const ApprovalConfigSchema = z.object({
 
 /**
  * Los nombres de política referencian implementaciones registradas en
- * @proof/policy-engine (ver packages/policy-engine/src/policies).
+ * @cloudproof/policy-engine (ver packages/policy-engine/src/policies).
  */
 export const ProjectConfigSchema = z
   .object({

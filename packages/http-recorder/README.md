@@ -1,4 +1,4 @@
-# @proof/http-recorder
+# @cloudproof/http-recorder
 
 Proxy HTTP local que captura el workload baseline y lo reproduce en orden
 contra otra combinacion app/schema. Reverse proxy es el modo recomendado; no

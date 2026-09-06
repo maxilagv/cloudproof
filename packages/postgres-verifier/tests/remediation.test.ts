@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { remediationFor, withRemediation } from "../dist/index.js";
-import type { Assertion, ExecutionState } from "@proof/schema";
+import type { Assertion, ExecutionState } from "@cloudproof/schema";
 
 const NOT_NULL_LINE =
   'SQLSTATE 23502: null value in column "currency" of relation "payments" violates not-null constraint';

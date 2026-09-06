@@ -1,7 +1,7 @@
 {
-  "name": "@proof/schema",
+  "name": "@cloudproof/schema",
   "version": "0.0.1",
-  "description": "Tipos y schema del Proof Bundle — el artefacto de evidencia estructurada",
+  "description": "Tipos y schema del CloudProof Bundle — el artefacto de evidencia estructurada",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "./dist/index.js",

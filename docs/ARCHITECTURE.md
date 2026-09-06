@@ -1,7 +1,7 @@
 # Arquitectura actual — Assurance Kernel
 
 Este documento describe el código ejecutable al 2026-07-16. La tesis v0.3
-define la dirección de producto: Proof es un Evidence Plane independiente del
+define la dirección de producto: CloudProof es un Evidence Plane independiente del
 agente, del humano y de CI; el motor inicial sigue siendo Node.js/Next.js,
 PostgreSQL y Prisma.
 
@@ -10,16 +10,16 @@ PostgreSQL y Prisma.
 ```text
 CHANGE / RELEASE CLAIM
         |
-        +--> proof release plan
+        +--> cloudproof release plan
         |      git diff + config + static triage
         |      PLAN_ONLY_NOT_VERIFIED + nextCommand
         |
-        +--> proof release verify
+        +--> cloudproof release verify
                Docker builds + Postgres + HTTP recorder + policies
                VERIFIED | UNSAFE | INCONCLUSIVE
                            |
                            v
-                    Proof Bundle v1
+                    CloudProof Bundle v1
 ```
 
 El plan es deliberadamente barato y nunca autoriza un release. Clasifica el
@@ -30,21 +30,21 @@ estados obligatorios ausentes.
 ## Flujo del verify
 
 ```text
-proof.config.(ts|json)
+cloudproof.config.(ts|json)
         |
         v
-@proof/config ---------- perfil trusted | internal | fork
+@cloudproof/config ---------- perfil trusted | internal | fork
         |
         v
-@proof/postgres-verifier
-        +--> @proof/docker-executor -- builds, clones, migraciones, aislamiento
-        +--> @proof/http-recorder ---- baseline, captura y replay
+@cloudproof/postgres-verifier
+        +--> @cloudproof/docker-executor -- builds, clones, migraciones, aislamiento
+        +--> @cloudproof/http-recorder ---- baseline, captura y replay
         +--> efectos SQL ------------- insert/update/delete por tabla
-        +--> @proof/policy-engine ---- policies y approvals exactas
+        +--> @cloudproof/policy-engine ---- policies y approvals exactas
         |
         v
-@proof/schema ---------- Proof Bundle v1
-        +--> @proof/cli -- reporte, persistencia y reproducción
+@cloudproof/schema ---------- CloudProof Bundle v1
+        +--> @cloudproof/cli -- reporte, persistencia y reproducción
         +--> MCP stdio -- objetos tipados sin salida lateral
 ```
 
@@ -85,12 +85,12 @@ lista obsoleta certifique un feature cambiado que nunca recibió tráfico.
 - App, PostgreSQL y migrador corren en redes internas sin egress.
 - El host accede mediante un sidecar TCP fijo; el código del repo no controla
   ese puente.
-- El workload recibe `PROOF_BASE_URL`, no credenciales de la base. La escritura
+- El workload recibe `CLOUDPROOF_BASE_URL`, no credenciales de la base. La escritura
   debe ser atribuible al contrato HTTP observado.
 - `trusted` conserva config TypeScript y workload local. `internal`/`fork`
   exigen config JSON data-only y aplican restricciones adicionales.
 - Un perfil endurecido reduce superficie, pero el Bundle v1 local no es una
-  atestación firmada ni Proof afirma aislar código hostil por completo.
+  atestación firmada ni CloudProof afirma aislar código hostil por completo.
 - Los bundles limitan y redactan evidencia; no deben contener logs ilimitados
   ni secretos.
 - Las approvals son exactas por assertion, visibles y opcionalmente expiran.
@@ -102,7 +102,7 @@ lista obsoleta certifique un feature cambiado que nunca recibió tráfico.
   por SQLSTATE/Prisma code y estado ejecutado.
 - `nextActions[]` describe de forma tipada qué evidencia falta o qué debe
   corregirse.
-- `proof init` instala en `AGENTS.md` la disciplina
+- `cloudproof init` instala en `AGENTS.md` la disciplina
   `plan → verify → remediate → re-verify`.
 - `release plan` nunca puede producir `VERIFIED`; `INCONCLUSIVE` nunca se
   transforma en verde por policy.

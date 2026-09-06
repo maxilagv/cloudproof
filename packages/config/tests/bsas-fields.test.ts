@@ -14,7 +14,7 @@ describe("fixtures.bootstrapSql (informe Bs As Neumáticos)", () => {
   it("acepta una ruta repo-relativa y rechaza traversal/absolutas", () => {
     const valid = ProjectConfigSchema.safeParse({
       ...BASE_CONFIG,
-      fixtures: { bootstrapSql: "proof.seed.sql" },
+      fixtures: { bootstrapSql: "cloudproof.seed.sql" },
     });
     expect(valid.success).toBe(true);
 

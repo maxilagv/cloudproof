@@ -9,24 +9,24 @@ import {
   renderWorkloadScript,
 } from "./openapi-workload.js";
 import { planAuthFixtures, renderAuthFixtureScript } from "./auth-fixtures.js";
-import { nodeDetector } from "@proof/plugin-node";
-import { postgresDetector } from "@proof/plugin-postgres";
-import { prismaDetector } from "@proof/plugin-prisma";
-import { githubActionsDetector } from "@proof/plugin-github-actions";
+import { nodeDetector } from "@cloudproof/plugin-node";
+import { postgresDetector } from "@cloudproof/plugin-postgres";
+import { prismaDetector } from "@cloudproof/plugin-prisma";
+import { githubActionsDetector } from "@cloudproof/plugin-github-actions";
 import {
   classifyGeneratedPath,
   prismaGeneratorOutputs,
   type Detector,
-} from "@proof/plugin-sdk";
+} from "@cloudproof/plugin-sdk";
 
 /**
  * Ver tesis, sección 6.3 ("Ejemplo de primera experiencia") y 15.2
- * (Fase 1: "proof init y detección de repositorio").
+ * (Fase 1: "cloudproof init y detección de repositorio").
  *
  * Corre los detectores del MVP (Fase 1-2: node, postgres, prisma,
  * github-actions — ver tesis 19.1) y, si no existe, escribe un
- * proof.config.ts de partida. NO genera todavía "immediate findings"
- * de seguridad (eso requiere @proof/postgres-verifier, que está
+ * cloudproof.config.ts de partida. NO genera todavía "immediate findings"
+ * de seguridad (eso requiere @cloudproof/postgres-verifier, que está
  * corriendo release verify real, no detección de stack).
  *
  * La detección de servicios (gate 1.E, primera corrida real) elige como
@@ -81,7 +81,7 @@ export interface InitResult {
   agentsPath: string;
   /** "created" | "updated" | "unchanged" para AGENTS.md. */
   agentsResult: "created" | "updated" | "unchanged";
-  /** Gestión de .gitignore: .proof/ es evidencia local y nunca debe versionarse. */
+  /** Gestión de .gitignore: .cloudproof/ es evidencia local y nunca debe versionarse. */
   gitignorePath: string;
   gitignoreResult: "created" | "updated" | "unchanged";
   /** Workload generado desde OpenAPI cuando el repo no declara e2e propio. */
@@ -114,8 +114,8 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const detected = results.filter((r) => r.detected).map((r) => ({ kind: r.kind, evidence: r.evidence }));
   const { services, excluded } = detectServices(cwd, detected);
 
-  const configPath = join(cwd, "proof.config.ts");
-  const jsonConfigPath = join(cwd, "proof.config.json");
+  const configPath = join(cwd, "cloudproof.config.ts");
+  const jsonConfigPath = join(cwd, "cloudproof.config.json");
   const configAlreadyExisted = existsSync(configPath);
   let configWritten = false;
   let jsonConfigWritten = false;
@@ -132,11 +132,11 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
     if (spec !== undefined) {
       const plan = planWorkloadFromOpenApi(spec.path, spec.document);
       if (plan.steps.length > 0) {
-        const scriptPath = join(cwd, "proof.workload.mjs");
+        const scriptPath = join(cwd, "cloudproof.workload.mjs");
         if (!existsSync(scriptPath)) {
           writeFileSync(scriptPath, renderWorkloadScript(plan), "utf-8");
         }
-        setup.workload = { command: "node", args: ["proof.workload.mjs"] };
+        setup.workload = { command: "node", args: ["cloudproof.workload.mjs"] };
         setup.coverage = {
           requiredRoutes: plan.requiredRoutes,
           ...(plan.rollbackProbeRoutes.length === 0
@@ -157,7 +157,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
         // reporta como gap accionable en vez de inventar rutas.
         const fixturePlan = planAuthFixtures(spec.document);
         if (fixturePlan.login !== undefined && fixturePlan.tokenProperty !== undefined) {
-          const fixtureScriptPath = join(cwd, "proof.fixtures.mjs");
+          const fixtureScriptPath = join(cwd, "cloudproof.fixtures.mjs");
           if (!existsSync(fixtureScriptPath)) {
             writeFileSync(
               fixtureScriptPath,
@@ -165,7 +165,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
               "utf-8",
             );
           }
-          setup.fixtures = { beforeAll: { command: "node", args: ["proof.fixtures.mjs"] } };
+          setup.fixtures = { beforeAll: { command: "node", args: ["cloudproof.fixtures.mjs"] } };
           authFixturesGenerated = {
             scriptPath: fixtureScriptPath,
             loginPath: fixturePlan.login.path,
@@ -198,7 +198,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const agentsPath = join(cwd, "AGENTS.md");
   const agentsResult = syncAgentsFile(agentsPath, services);
   const gitignorePath = join(cwd, ".gitignore");
-  const gitignoreResult = ensureProofIgnored(cwd, gitignorePath);
+  const gitignoreResult = ensureCloudProofIgnored(cwd, gitignorePath);
 
   const result: InitResult = {
     detected,
@@ -238,7 +238,7 @@ function listDirectories(root: string): string[] {
 }
 
 /**
- * Git is already a Proof prerequisite, so its ignore engine is the source of
+ * Git is already a CloudProof prerequisite, so its ignore engine is the source of
  * truth for generated outputs. Falling back to the fixed directory list keeps
  * `init` able to report a missing Git installation or repository.
  */
@@ -269,7 +269,7 @@ function gitIgnoredDirectories(cwd: string, relativePaths: string[]): Set<string
  * generado se descarta ANTES de considerarlo servicio (informe Lubrisur:
  * el cliente Prisma en src/generated/prisma trae su propio package.json y
  * no es una aplicación) — y cada descarte queda registrado con su razón
- * para que `proof init` lo muestre en vez de fallar en silencio.
+ * para que `cloudproof init` lo muestre en vez de fallar en silencio.
  */
 function packageDirectories(
   cwd: string,
@@ -323,7 +323,7 @@ function recordGeneratedPackages(
  * variantes con nombre custom en `<dir>/`, `<dir>/docker/` y `docker/` de
  * la raíz (el patrón real de inbox-zero y similares). Preferencia:
  * PRIMERO los nombres de producción (`Dockerfile.prod[uction]`,
- * `prod[uction].Dockerfile`) — Proof verifica releases, no contenedores de
+ * `prod[uction].Dockerfile`) — CloudProof verifica releases, no contenedores de
  * desarrollo — y después el match por nombre de servicio
  * (`Dockerfile.<name>` / `<name>.Dockerfile`).
  */
@@ -663,15 +663,15 @@ function buildConfigTemplate(
 
   const workloadBlock =
     setup.workload === undefined
-      ? "  // Declarar workload antes de verificar; sin tráfico Proof será INCONCLUSIVE.\n"
+      ? "  // Declarar workload antes de verificar; sin tráfico CloudProof será INCONCLUSIVE.\n"
       : `  workload: ${JSON.stringify(setup.workload)},\n`;
   const coverageBlock =
     setup.coverage === undefined
-      ? "  // Declarar todas las rutas obligatorias. Sin este universo Proof será INCONCLUSIVE.\n  // coverage: { requiredRoutes: [\"POST /payments\", \"GET /payments\"] },\n"
+      ? "  // Declarar todas las rutas obligatorias. Sin este universo CloudProof será INCONCLUSIVE.\n  // coverage: { requiredRoutes: [\"POST /payments\", \"GET /payments\"] },\n"
       : `  coverage: ${JSON.stringify(setup.coverage, null, 2).split("\n").join("\n  ")},\n`;
 
-  return `// Generado por "proof init". Es un objeto plano para que el repo no
-// necesite instalar @proof/config. Ver tesis, secciones 5.1 y 15.2.
+  return `// Generado por "cloudproof init". Es un objeto plano para que el repo no
+// necesite instalar @cloudproof/config. Ver tesis, secciones 5.1 y 15.2.
 export default {
   services: {
 ${renderedServices}
@@ -683,9 +683,9 @@ ${renderedServices}
   policies: ["no-destructive-migrations"],
 ${workloadBlock}${coverageBlock}${
     setup.fixtures === undefined
-      ? "  // Si la API exige identidad, prepará usuario/token vía HTTP acá; sin\n  // registro público, sembrá la identidad con bootstrapSql (se aplica tras\n  // las migraciones, antes del workload, y su digest queda en el Bundle):\n  // fixtures: { beforeAll: { command: \"node\", args: [\"proof.fixtures.mjs\"] }, bootstrapSql: \"proof.seed.sql\" },\n"
+      ? "  // Si la API exige identidad, prepará usuario/token vía HTTP acá; sin\n  // registro público, sembrá la identidad con bootstrapSql (se aplica tras\n  // las migraciones, antes del workload, y su digest queda en el Bundle):\n  // fixtures: { beforeAll: { command: \"node\", args: [\"cloudproof.fixtures.mjs\"] }, bootstrapSql: \"cloudproof.seed.sql\" },\n"
       : `  fixtures: ${JSON.stringify(setup.fixtures)},\n`
-  }  // proof doctor clasifica las variables de .env.example por uso real del
+  }  // cloudproof doctor clasifica las variables de .env.example por uso real del
   // código; si sabe más que la heurística, declaralo:
   // env: { required: ["DATABASE_URL"], optional: ["ARCA_API_KEY"] },
   approvals: [],
@@ -696,24 +696,24 @@ ${workloadBlock}${coverageBlock}${
 // ------------------------------------------------------------------ .gitignore
 
 /**
- * `.proof/` contiene evidencia local (bundles, claves de firma), nunca
+ * `.cloudproof/` contiene evidencia local (bundles, claves de firma), nunca
  * configuración: no debe versionarse (informe Lubrisur: el bundle quedó como
  * archivo sin trackear). Idempotente por dos vías: si el engine de Git ya lo
  * ignora (regla local, global o anidada) no se toca nada; si no, se agrega
- * una única línea `.proof/` al .gitignore de la raíz.
+ * una única línea `.cloudproof/` al .gitignore de la raíz.
  */
-export function ensureProofIgnored(
+export function ensureCloudProofIgnored(
   cwd: string,
   gitignorePath: string,
 ): "created" | "updated" | "unchanged" {
-  const probe = spawnSync("git", ["check-ignore", "-q", ".proof/probe"], {
+  const probe = spawnSync("git", ["check-ignore", "-q", ".cloudproof/probe"], {
     cwd,
     encoding: "utf-8",
     windowsHide: true,
   });
   if (probe.status === 0) return "unchanged";
 
-  const managedBlock = "# Evidencia local de Proof (proof release verify)\n.proof/\n";
+  const managedBlock = "# Evidencia local de CloudProof (cloudproof release verify)\n.cloudproof/\n";
   if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, managedBlock, "utf-8");
     return "created";
@@ -722,7 +722,7 @@ export function ensureProofIgnored(
   // Cobertura sin git instalado: una línea equivalente ya presente alcanza.
   const alreadyListed = current
     .split(/\r?\n/)
-    .some((line) => /^\/?\.proof\/?$/.test(line.trim()));
+    .some((line) => /^\/?\.cloudproof\/?$/.test(line.trim()));
   if (alreadyListed) return "unchanged";
   writeFileSync(gitignorePath, `${current.replace(/\n*$/, "\n\n")}${managedBlock}`, "utf-8");
   return "updated";
@@ -730,8 +730,8 @@ export function ensureProofIgnored(
 
 // ------------------------------------------------------------------ AGENTS.md
 
-const AGENTS_BEGIN = "<!-- proof:agents:begin -->";
-const AGENTS_END = "<!-- proof:agents:end -->";
+const AGENTS_BEGIN = "<!-- cloudproof:agents:begin -->";
+const AGENTS_END = "<!-- cloudproof:agents:end -->";
 
 /**
  * Contenido del bloque gestionado de AGENTS.md. En inglés porque es la
@@ -742,36 +742,36 @@ const AGENTS_END = "<!-- proof:agents:end -->";
 export function buildAgentsBlock(services: DetectedService[]): string {
   const serviceFlag =
     services.length > 1
-      ? " In this monorepo also pass `--service <name>` from the Proof config."
+      ? " In this monorepo also pass `--service <name>` from the CloudProof config."
       : "";
   return `${AGENTS_BEGIN}
-## Proof — release evidence (mandatory for agents)
+## CloudProof — release evidence (mandatory for agents)
 
-Proof is the external evidence gate for this repository. Static reasoning and
+CloudProof is the external evidence gate for this repository. Static reasoning and
 ordinary tests are useful, but neither is permission to claim release safety.
 
 Before declaring a code, dependency, runtime, build, CI, schema, or migration
 change complete, run the bounded fast path:
 
 \`\`\`sh
-proof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
+cloudproof release plan --base-sha <deployed-sha> --head-sha <candidate-sha>
 \`\`\`
 
-or call \`proof_release_plan\` over MCP. A plan always returns
+or call \`cloudproof_release_plan\` over MCP. A plan always returns
 \`PLAN_ONLY_NOT_VERIFIED\`; it can route work but can never prove safety. Follow
 its typed \`nextCommand\`. When execution is required, run
-\`proof release verify\` (or \`proof_release_verify\`) and cite the resulting
+\`cloudproof release verify\` (or \`cloudproof_release_verify\`) and cite the resulting
 Bundle.${serviceFlag}
 
 While iterating on UNCOMMITTED local changes, run
-\`proof release verify --worktree --base-sha <deployed-sha>\` (trusted profile
-only): Proof freezes the working tree into an immutable snapshot commit and
+\`cloudproof release verify --worktree --base-sha <deployed-sha>\` (trusted profile
+only): CloudProof freezes the working tree into an immutable snapshot commit and
 verifies that exact content. Use it to iterate; a merge/release gate still
 requires verifying a pushed commit.
 
 For untrusted forks use \`--profile fork\` on a secretless isolated runner and
-keep \`PROOF_EXECUTION_PROFILE_LOCKED=fork\`. Never downgrade a locked profile.
-Fork/internal profiles consume \`proof.config.json\` as data; executable config
+keep \`CLOUDPROOF_EXECUTION_PROFILE_LOCKED=fork\`. Never downgrade a locked profile.
+Fork/internal profiles consume \`cloudproof.config.json\` as data; executable config
 from the candidate is rejected. If the selected profile rejects a host workload,
 report the blocker and do not substitute trust for missing evidence.
 
@@ -786,8 +786,8 @@ Interpret \`conclusion\` as a typed enum:
 
 The full gate covers A0/A1 × S0/S1, two rolling schedules, SQL effects, and A0
 rollback after A1 writes. Reproduce a finding with
-\`proof reproduce <assertion-id>\`. Workloads must use \`PROOF_BASE_URL\`.
-Never edit \`.proof/\`; it contains evidence, not configuration.
+\`cloudproof reproduce <assertion-id>\`. Workloads must use \`CLOUDPROOF_BASE_URL\`.
+Never edit \`.cloudproof/\`; it contains evidence, not configuration.
 ${AGENTS_END}`;
 }
 
@@ -851,15 +851,15 @@ function printHuman(result: InitResult): void {
     result.agentsResult === "created"
       ? `${symbols.ok} Generated: ${result.agentsPath} ${paint.dim("(instrucciones para agentes de IA)")}\n`
       : result.agentsResult === "updated"
-        ? `${symbols.ok} Updated: ${result.agentsPath} ${paint.dim("(bloque gestionado de Proof)")}\n`
+        ? `${symbols.ok} Updated: ${result.agentsPath} ${paint.dim("(bloque gestionado de CloudProof)")}\n`
         : `${symbols.dot} ${paint.dim(`${result.agentsPath} ya está al día.`)}\n`,
   );
   process.stdout.write(
     result.gitignoreResult === "created"
-      ? `${symbols.ok} Generated: ${result.gitignorePath} ${paint.dim("(.proof/ es evidencia local, nunca se versiona)")}\n`
+      ? `${symbols.ok} Generated: ${result.gitignorePath} ${paint.dim("(.cloudproof/ es evidencia local, nunca se versiona)")}\n`
       : result.gitignoreResult === "updated"
-        ? `${symbols.ok} Updated: ${result.gitignorePath} ${paint.dim("(agregado .proof/)")}\n`
-        : `${symbols.dot} ${paint.dim(".proof/ ya está ignorado por Git.")}\n`,
+        ? `${symbols.ok} Updated: ${result.gitignorePath} ${paint.dim("(agregado .cloudproof/)")}\n`
+        : `${symbols.dot} ${paint.dim(".cloudproof/ ya está ignorado por Git.")}\n`,
   );
   if (result.workloadGenerated !== undefined) {
     const generated = result.workloadGenerated;
@@ -883,5 +883,5 @@ function printHuman(result: InitResult): void {
       process.stdout.write(`  ${symbols.warn} ${paint.yellow(gap)}\n`);
     }
   }
-  process.stdout.write(`\nNext: ${paint.cyan("proof doctor")}\n`);
+  process.stdout.write(`\nNext: ${paint.cyan("cloudproof doctor")}\n`);
 }

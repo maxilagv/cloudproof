@@ -181,7 +181,7 @@ def build_addendum() -> None:
         topMargin=21 * mm,
         bottomMargin=18 * mm,
         title="Tesis de Producto - Developer Reliability Platform v0.3",
-        author="Proof",
+        author="CloudProof",
     )
 
     story: list = []
@@ -189,11 +189,11 @@ def build_addendum() -> None:
         [
             Spacer(1, 38 * mm),
             para("ADDENDUM ESTRATEGICO v0.3", styles["title"]),
-            para("Proof beyond agents: una capa de evidencia para humanos, CI y cualquier harness", styles["subtitle"]),
+            para("CloudProof beyond agents: una capa de evidencia para humanos, CI y cualquier harness", styles["subtitle"]),
             para("Plan de fortalecimiento previo a Fase 2 - 15 de julio de 2026", styles["subtitle"]),
             Spacer(1, 10 * mm),
             para(
-                "<b>Decision de tesis:</b> no convertir Proof en otro agente. Convertirlo en el verificador independiente que un agente, un humano y un sistema de CI necesitan para declarar un cambio confiable.",
+                "<b>Decision de tesis:</b> no convertir CloudProof en otro agente. Convertirlo en el verificador independiente que un agente, un humano y un sistema de CI necesitan para declarar un cambio confiable.",
                 styles["callout"],
             ),
             para(
@@ -240,7 +240,7 @@ def build_addendum() -> None:
         "2. La oportunidad agentic, sin depender de una moda",
         [
             "La observacion correcta de la sesion de dogfooding no es que un agente necesite 'mas herramientas'. Es que un agente puede leer, detectar patrones y escribir fixes, pero no puede convertir una conjetura sobre un estado contrafactual en un hecho sin ejecutar el sistema. El defecto de una migracion faltante ilustra el limite: no esta necesariamente en el diff, sino en un estado de runtime que el diff no representa.",
-            "La segunda observacion es mas general: los agentes tienden a declarar exito despues de que los tests habituales pasan. Anthropic documenta que la autoevaluacion es indulgente y que un evaluador separado es un multiplicador de calidad. Proof debe ser ese evaluador determinista para propiedades de release, no una segunda opinion de LLM.",
+            "La segunda observacion es mas general: los agentes tienden a declarar exito despues de que los tests habituales pasan. Anthropic documenta que la autoevaluacion es indulgente y que un evaluador separado es un multiplicador de calidad. CloudProof debe ser ese evaluador determinista para propiedades de release, no una segunda opinion de LLM.",
             "La tesis no debe basarse en una ventana especulativa de 1 a 3 anos ni en una fecha futura de especificacion MCP. Al 15 de julio de 2026, una cita a un supuesto release del 28 de julio de 2026 no es evidencia disponible. MCP es una interfaz importante, pero el activo durable es el contrato de evidencia, no el transporte.",
         ],
         styles,
@@ -258,14 +258,14 @@ def build_addendum() -> None:
     story += section(
         "3. Posicionamiento frente a la competencia: componer, no caricaturizar",
         [
-            "Atlas analiza migraciones y detecta cambios destructivos, data-dependent e incompatibles. Es una capa estatica valiosa y debe ser un input de Proof, no un enemigo a reimplementar por orgullo. Signadot ofrece sandboxes aislados, pruebas E2E y comparacion baseline/sandbox. Speedscale controla replay y condiciones de comparacion. pgroll operacionaliza esquemas compatibles y reversibles.",
-            "La apuesta diferenciada de Proof es unir la semantica de la transicion concreta con un recibo verificable: que version estaba desplegada, que datos iniciales se usaron, que migracion se aplico, que flujos fueron ejercitados, que writes cambio la aplicacion vieja/nueva y que incertidumbre permanece. Esa capa puede consumir analisis de Atlas, workloads de Signadot/Speedscale y estrategias de pgroll.",
-            "Superar a Atlas no significa replicar mas reglas SQL. Significa responder una pregunta que una regla estatica no puede cerrar sola: 'en este estado de datos y con estos clientes desplegados, la transicion es operativa?'. A la vez, Proof debe integrar linting estatico para dar una respuesta rapida antes del runtime costoso.",
+            "Atlas analiza migraciones y detecta cambios destructivos, data-dependent e incompatibles. Es una capa estatica valiosa y debe ser un input de CloudProof, no un enemigo a reimplementar por orgullo. Signadot ofrece sandboxes aislados, pruebas E2E y comparacion baseline/sandbox. Speedscale controla replay y condiciones de comparacion. pgroll operacionaliza esquemas compatibles y reversibles.",
+            "La apuesta diferenciada de CloudProof es unir la semantica de la transicion concreta con un recibo verificable: que version estaba desplegada, que datos iniciales se usaron, que migracion se aplico, que flujos fueron ejercitados, que writes cambio la aplicacion vieja/nueva y que incertidumbre permanece. Esa capa puede consumir analisis de Atlas, workloads de Signadot/Speedscale y estrategias de pgroll.",
+            "Superar a Atlas no significa replicar mas reglas SQL. Significa responder una pregunta que una regla estatica no puede cerrar sola: 'en este estado de datos y con estos clientes desplegados, la transicion es operativa?'. A la vez, CloudProof debe integrar linting estatico para dar una respuesta rapida antes del runtime costoso.",
         ],
         styles,
     )
     competition_rows = [
-        [cell("Capa", styles["tablehead"]), cell("Que se adopta", styles["tablehead"]), cell("Que Proof debe poseer", styles["tablehead"])],
+        [cell("Capa", styles["tablehead"]), cell("Que se adopta", styles["tablehead"]), cell("Que CloudProof debe poseer", styles["tablehead"])],
         [cell("Atlas", styles["table"]), cell("Diagnosticos de riesgo semantico, politicas y salida compatible con CI/SARIF donde exista.", styles["table"]), cell("Seleccion dinamica, reproduccion A0/A1 x S0/S1 y evidencia de comportamiento real.", styles["table"])],
         [cell("Signadot", styles["table"]), cell("Entornos aislados, tests de integracion y comparacion baseline/sandbox.", styles["table"]), cell("Release graph, equivalencia de transicion y Bundle portable independiente del proveedor de entorno.", styles["table"])],
         [cell("Speedscale", styles["table"]), cell("Captura/replay, configuracion de exito y control de ruido.", styles["table"]), cell("Contrato de coverage de release, efectos SQL, redaccion y reproduccion de hallazgos.", styles["table"])],
@@ -285,14 +285,14 @@ def build_addendum() -> None:
     story += [Spacer(1, 2 * mm), competition_table, PageBreak()]
 
     story += section(
-        "4. Nueva tesis central: Proof como Evidence Plane",
+        "4. Nueva tesis central: CloudProof como Evidence Plane",
         [
-            "Proof debe ser una capa de evidencia de cambios, no una coleccion de comandos ni un orquestador de agentes. Recibe una afirmacion verificable, selecciona el nivel de aseguramiento adecuado, ejecuta en un sobre seguro, devuelve un veredicto tipado y deja artefactos cuya procedencia puede revisarse sin confiar en el agente que los solicito.",
+            "CloudProof debe ser una capa de evidencia de cambios, no una coleccion de comandos ni un orquestador de agentes. Recibe una afirmacion verificable, selecciona el nivel de aseguramiento adecuado, ejecuta en un sobre seguro, devuelve un veredicto tipado y deja artefactos cuya procedencia puede revisarse sin confiar en el agente que los solicito.",
             "El principio se extiende mas alla de releases de base de datos: toda afirmacion importante debe expresar sujeto, transicion, invariantes, cobertura, sobre de ejecucion, evidencia y limites. El motor inicial sigue siendo Postgres/Prisma. La abstraccion se extrae de su semantica probada, no antes.",
         ],
         styles,
     )
-    diagram = """CHANGE / PR / INCIDENT\n        |\n        v\n  proof plan  -> riesgo, costo, coverage requerida\n        |\n        +--> static evidence (Atlas-compatible, diff, drift)\n        +--> dynamic evidence (transiciones, workload, SQL effects)\n        +--> policy evidence (approvals, excepciones, expiracion)\n        |\n        v\n  Proof Bundle v2 -> CI / GitHub / Codex / Claude / Copilot / humano\n        |\n        v\n  verify -> remediate -> re-verify -> attestate"""
+    diagram = """CHANGE / PR / INCIDENT\n        |\n        v\n  cloudproof plan  -> riesgo, costo, coverage requerida\n        |\n        +--> static evidence (Atlas-compatible, diff, drift)\n        +--> dynamic evidence (transiciones, workload, SQL effects)\n        +--> policy evidence (approvals, excepciones, expiracion)\n        |\n        v\n  CloudProof Bundle v2 -> CI / GitHub / Codex / Claude / Copilot / humano\n        |\n        v\n  verify -> remediate -> re-verify -> attestate"""
     story += [Preformatted(diagram, styles["mono"])]
     pillars = [
         [cell("Pilar", styles["tablehead"]), cell("Regla de diseno", styles["tablehead"])],
@@ -324,7 +324,7 @@ def build_addendum() -> None:
     ladder_rows = [
         [cell("Nivel", styles["tablehead"]), cell("Objetivo", styles["tablehead"]), cell("Salida", styles["tablehead"]), cell("Meta", styles["tablehead"])],
         [cell("L0 - Inspect", styles["table"]), cell("Detectar diff, drift, service ownership y rutas potenciales. Cero build.", styles["table"]), cell("Plan tipado y declaracion de riesgo; nunca VERIFIED.", styles["table"]), cell("p95 < 30 s", styles["table"])],
-        [cell("L1 - Triage", styles["table"]), cell("Correr analizadores estaticos, sanity checks, cache/provenance y un smoke selectivo.", styles["table"]), cell("REQUIRES_FULL_PROOF o riesgo reducido con limites claros.", styles["table"]), cell("p95 < 2 min", styles["table"])],
+        [cell("L1 - Triage", styles["table"]), cell("Correr analizadores estaticos, sanity checks, cache/provenance y un smoke selectivo.", styles["table"]), cell("REQUIRES_FULL_CLOUDPROOF o riesgo reducido con limites claros.", styles["table"]), cell("p95 < 2 min", styles["table"])],
         [cell("L2 - Transition", styles["table"]), cell("Ejecutar la matriz relevante sobre datos y workload aislados.", styles["table"]), cell("VERIFIED, UNSAFE o INCONCLUSIVE con Bundle completo.", styles["table"]), cell("p95 < 10 min", styles["table"])],
         [cell("L3 - Release", styles["table"]), cell("Evidence de rolling, rollback, policy y atestacion en runner confiable.", styles["table"]), cell("Decision de merge/release firmada y con expiracion.", styles["table"]), cell("selectivo", styles["table"])],
     ]
@@ -353,7 +353,7 @@ def build_addendum() -> None:
         [cell("P0", styles["table"]), cell("Verdad de alcance", styles["table"]), cell("Matriz implementada se publica por estado; claims y UI no exceden A0+S1 hasta que cada estado faltante tenga E2E real y fixture negativo.", styles["table"])],
         [cell("P0", styles["table"]), cell("Sobre seguro", styles["table"]), cell("Perfiles trusted / internal PR / fork; runner efimero, red deny-by-default, no secrets en ejecucion de fork y configuracion declarativa o aislada. Threat model y pruebas de escape aprobadas.", styles["table"])],
         [cell("P0", styles["table"]), cell("Datos y privacidad", styles["table"]), cell("Redaccion por politica antes de persistir, allowlist de headers/campos, limites, retencion y prueba de que secretos no entran al Bundle ni al log.", styles["table"])],
-        [cell("P1", styles["table"]), cell("Fast path", styles["table"]), cell("proof plan/inspect y L1 triage con cache, cancelacion y clasificacion estatica. En benchmark externo, p95 < 2 min para resultados parciales utiles.", styles["table"])],
+        [cell("P1", styles["table"]), cell("Fast path", styles["table"]), cell("cloudproof plan/inspect y L1 triage con cache, cancelacion y clasificacion estatica. En benchmark externo, p95 < 2 min para resultados parciales utiles.", styles["table"])],
         [cell("P1", styles["table"]), cell("Matriz de transicion", styles["table"]), cell("A1+S0, coexistencia A0/A1+S1, final A1+S1 y rollback A0 despues de writes A1. Cada estado tiene assertion y reproduccion.", styles["table"])],
         [cell("P1", styles["table"]), cell("Bundle v2", styles["table"]), cell("Schema estable, semantica de coverage, evidence references content-addressed, runner envelope, redaction y attestation opcional. Validator y fixtures de conformidad abiertos.", styles["table"])],
         [cell("P2", styles["table"]), cell("Agent fitness", styles["table"]), cell("Eval suite con Codex, Claude Code y Copilot cuando sea accesible: uso correcto, costo, reintentos, no-declaracion-prematura y comprension de INCONCLUSIVE.", styles["table"])],
@@ -373,21 +373,21 @@ def build_addendum() -> None:
     story += [Spacer(1, 2 * mm), work_table, PageBreak()]
 
     story += section(
-        "7. Proof Bundle v2: el formato tiene que preceder al estandar",
+        "7. CloudProof Bundle v2: el formato tiene que preceder al estandar",
         [
             "Un formato no se vuelve estandar porque una herramienta le asigna un nombre. Se vuelve estandar cuando productores y consumidores distintos intercambian el mismo hecho sin perder significado. Por eso Bundle v2 debe ser primero una especificacion publica, un validador, fixtures de conformidad y una implementacion de referencia; la gobernanza se abre solo despues de uso externo real.",
             "El Bundle no debe mezclar evidencia sensible con su resumen. El objeto principal contiene hashes, referencias y metadatos de redaccion. Los cuerpos necesarios para reproduccion permanecen en un artifact store bajo una politica explicita o se reemplazan por fixtures minimizados.",
         ],
         styles,
     )
-    bundle = """ProofBundle v2 (resumen conceptual)\n- subject: base/head, deploy target, release-graph transition\n- claim: invariant, policy, severity and expiry\n- verdict: VERIFIED | UNSAFE | INCONCLUSIVE | NOT_APPLICABLE\n- coverage: routes, flows, writes, states, omissions and confidence\n- execution: runner identity, sandbox profile, image/plugin digests, timestamps\n- evidenceRefs: content-addressed artifacts plus redaction classification\n- remediation: deterministic steps, human approvals and next actions\n- attestation: optional signed envelope bound to input/output hashes"""
+    bundle = """CloudProofBundle v2 (resumen conceptual)\n- subject: base/head, deploy target, release-graph transition\n- claim: invariant, policy, severity and expiry\n- verdict: VERIFIED | UNSAFE | INCONCLUSIVE | NOT_APPLICABLE\n- coverage: routes, flows, writes, states, omissions and confidence\n- execution: runner identity, sandbox profile, image/plugin digests, timestamps\n- evidenceRefs: content-addressed artifacts plus redaction classification\n- remediation: deterministic steps, human approvals and next actions\n- attestation: optional signed envelope bound to input/output hashes"""
     story += [Preformatted(bundle, styles["mono"])]
     story += bullets(
         [
             "Definir semantica, no solo JSON: cuando una coverage es 'complete', que significa 'verified', cuando vence una approval y que invalida un Bundle.",
             "Separar un Bundle local no firmado de una atestacion de CI/BYOC firmada. Nunca permitir que la firma esconda coverage insuficiente.",
             "Publicar un CLI validator, JSON Schema, changelog de compatibilidad y corpus de Bundles validos/invalidos.",
-            "Aceptar evidencia externa con namespace y emisor, sin convertirla automaticamente en una conclusion de Proof.",
+            "Aceptar evidencia externa con namespace y emisor, sin convertirla automaticamente en una conclusion de CloudProof.",
         ],
         styles,
     )
@@ -395,8 +395,8 @@ def build_addendum() -> None:
     story += section(
         "8. Seguridad y privacidad: el verificador debe merecer confianza",
         [
-            "La v0.2 acierta al pedir egress bloqueado, OIDC, aislamiento, plugins firmados y sanitizacion. La implementacion actual revela por que estas no son notas futuras: proof.config.ts puede ser TypeScript ejecutable, el workload es un proceso local y Docker build ejecuta un Dockerfile del repo. La herramienta es segura para trabajo en un repositorio confiable; no debe presentarse como sandbox suficiente para codigo hostil hasta que exista un sobre de ejecucion independiente.",
-            "Codex y Claude convergen en la misma leccion: aislamiento de filesystem y de red deben operar juntos. MCP agrega otra superficie: scopes, aprobaciones, tool allowlists, OAuth de recursos remotos y proteccion contra confused deputy. Proof debe tratar sus tools como una API de alto impacto, aunque hoy sean locales.",
+            "La v0.2 acierta al pedir egress bloqueado, OIDC, aislamiento, plugins firmados y sanitizacion. La implementacion actual revela por que estas no son notas futuras: cloudproof.config.ts puede ser TypeScript ejecutable, el workload es un proceso local y Docker build ejecuta un Dockerfile del repo. La herramienta es segura para trabajo en un repositorio confiable; no debe presentarse como sandbox suficiente para codigo hostil hasta que exista un sobre de ejecucion independiente.",
+            "Codex y Claude convergen en la misma leccion: aislamiento de filesystem y de red deben operar juntos. MCP agrega otra superficie: scopes, aprobaciones, tool allowlists, OAuth de recursos remotos y proteccion contra confused deputy. CloudProof debe tratar sus tools como una API de alto impacto, aunque hoy sean locales.",
         ],
         styles,
     )
@@ -424,17 +424,17 @@ def build_addendum() -> None:
     story += section(
         "9. Interfaz para agentes: contrato operacional, no chat",
         [
-            "AGENTS.md, skills y MCP son superficies complementarias. AGENTS.md explica la regla durable del repositorio; una skill empaqueta el procedimiento; MCP expone datos y acciones con schema; CI aplica la politica. Proof debe publicar la misma semantica en las cuatro, sin pedir a un modelo que interprete prosa para decidir el gate.",
-            "El contrato debe impedir el fracaso comun: 'los tests pasan, listo'. Si un diff toca una superficie de riesgo, proof plan devuelve las afirmaciones requeridas; el harness no puede marcar la tarea como release-ready mientras falte una evidencia vigente. El agente puede decidir como corregir; no puede autoemitir la prueba.",
+            "AGENTS.md, skills y MCP son superficies complementarias. AGENTS.md explica la regla durable del repositorio; una skill empaqueta el procedimiento; MCP expone datos y acciones con schema; CI aplica la politica. CloudProof debe publicar la misma semantica en las cuatro, sin pedir a un modelo que interprete prosa para decidir el gate.",
+            "El contrato debe impedir el fracaso comun: 'los tests pasan, listo'. Si un diff toca una superficie de riesgo, cloudproof plan devuelve las afirmaciones requeridas; el harness no puede marcar la tarea como release-ready mientras falte una evidencia vigente. El agente puede decidir como corregir; no puede autoemitir la prueba.",
         ],
         styles,
     )
     agent_rows = [
         [cell("Momento", styles["tablehead"]), cell("Contrato propuesto", styles["tablehead"]), cell("No hacer", styles["tablehead"])],
-        [cell("Antes de editar", styles["table"]), cell("proof_plan explica riesgo, costo, coverage y nivel L0-L3 requerido.", styles["table"]), cell("No lanzar un full verify por cada razonamiento o cambio irrelevante.", styles["table"])],
-        [cell("Durante la tarea", styles["table"]), cell("proof_inspect/triage alimenta el loop rapido; nextActions son objetos tipados que el agente puede ejecutar o escalar.", styles["table"]), cell("No transformar recomendaciones LLM en hechos ni ocultar un INCONCLUSIVE.", styles["table"])],
-        [cell("Antes de terminar", styles["table"]), cell("proof_release_verify produce Bundle, policy decision y evidencia resumida; CI valida vigencia y firma.", styles["table"]), cell("No permitir que el mismo actor modifique tests/policy y apruebe el resultado sin un control independiente.", styles["table"])],
-        [cell("Despues del incidente", styles["table"]), cell("proof_reproduce crea un capsule sanitizado; un humano aprueba convertirlo en regresion/invariante.", styles["table"]), cell("No capturar trafico productivo o secretos por defecto.", styles["table"])],
+        [cell("Antes de editar", styles["table"]), cell("cloudproof_plan explica riesgo, costo, coverage y nivel L0-L3 requerido.", styles["table"]), cell("No lanzar un full verify por cada razonamiento o cambio irrelevante.", styles["table"])],
+        [cell("Durante la tarea", styles["table"]), cell("cloudproof_inspect/triage alimenta el loop rapido; nextActions son objetos tipados que el agente puede ejecutar o escalar.", styles["table"]), cell("No transformar recomendaciones LLM en hechos ni ocultar un INCONCLUSIVE.", styles["table"])],
+        [cell("Antes de terminar", styles["table"]), cell("cloudproof_release_verify produce Bundle, policy decision y evidencia resumida; CI valida vigencia y firma.", styles["table"]), cell("No permitir que el mismo actor modifique tests/policy y apruebe el resultado sin un control independiente.", styles["table"])],
+        [cell("Despues del incidente", styles["table"]), cell("cloudproof_reproduce crea un capsule sanitizado; un humano aprueba convertirlo en regresion/invariante.", styles["table"]), cell("No capturar trafico productivo o secretos por defecto.", styles["table"])],
     ]
     agent_table = Table(agent_rows, colWidths=[29 * mm, 81 * mm, 64 * mm], repeatRows=1)
     agent_table.setStyle(TableStyle([
@@ -452,14 +452,14 @@ def build_addendum() -> None:
     story += section(
         "10. Validacion: las hipotesis deben poder perder",
         [
-            "La categoria no se valida con demos internas. La unidad de validacion pasa a ser una tarea real, un repositorio real y una afirmacion de release real. Se mide tanto la calidad del motor como la capacidad de distintos harnesses de usarlo sin asistencia. El objetivo no es maximizar llamados a Proof; es minimizar cambios riesgoso sin evidencia y tiempo desperdiciado.",
+            "La categoria no se valida con demos internas. La unidad de validacion pasa a ser una tarea real, un repositorio real y una afirmacion de release real. Se mide tanto la calidad del motor como la capacidad de distintos harnesses de usarlo sin asistencia. El objetivo no es maximizar llamados a CloudProof; es minimizar cambios riesgoso sin evidencia y tiempo desperdiciado.",
         ],
         styles,
     )
     metric_rows = [
         [cell("Hipotesis", styles["tablehead"]), cell("Experimento", styles["tablehead"]), cell("Gate", styles["tablehead"])],
         [cell("El fast path cambia el loop", styles["table"]), cell("20 repos externos representativos; medir L0/L1, cache, cancelacion y cuantos L2 eran necesarios.", styles["table"]), cell("p95 L1 < 2 min y adopcion sin degradar precision.", styles["table"])],
-        [cell("El proof reduce falso exito agente", styles["table"]), cell("Corpus versionado de migraciones seguras/inseguras, drift y dependencias; ejecutar con al menos dos harnesses y humano baseline.", styles["table"]), cell("Menos declaraciones prematuras y mas hallazgos cerrados sin aumento inaceptable de flakes.", styles["table"])],
+        [cell("El cloudproof reduce falso exito agente", styles["table"]), cell("Corpus versionado de migraciones seguras/inseguras, drift y dependencias; ejecutar con al menos dos harnesses y humano baseline.", styles["table"]), cell("Menos declaraciones prematuras y mas hallazgos cerrados sin aumento inaceptable de flakes.", styles["table"])],
         [cell("El Bundle es interoperable", styles["table"]), cell("Un productor externo o adapter y un consumidor externo validan el schema/conformance corpus sin usar el CLI principal.", styles["table"]), cell("Dos implementaciones o un consumidor independiente antes de hablar de estandar.", styles["table"])],
         [cell("El gate merece Enforce", styles["table"]), cell("Pilotos con Observe/Recommend antes de bloquear, revision humana de cada UNSAFE/INCONCLUSIVE y cada override.", styles["table"]), cell("Falso positivo bloqueante < 3%, reproducibilidad > 95%, politica de excepcion usada correctamente.", styles["table"])],
         [cell("Se puede vender", styles["table"]), cell("Entrevistas y pilotos sobre un servicio stateful donde haya costo de release; comparar contra su proceso actual y herramientas adyacentes.", styles["table"]), cell("Un comprador atribuye valor a prevencion o confianza, no solo a una demo tecnica.", styles["table"])],
@@ -486,10 +486,10 @@ def build_addendum() -> None:
     )
     decisions_rows = [
         [cell("ID", styles["tablehead"]), cell("Decision", styles["tablehead"]), cell("Estado", styles["tablehead"]), cell("Revision", styles["tablehead"])],
-        [cell("D-018", styles["table"]), cell("Proof es un Evidence Plane neutral a agente/humano/CI; no un framework de agentes.", styles["table"]), cell("Aceptada", styles["table"]), cell("Al finalizar 1.X", styles["table"])],
+        [cell("D-018", styles["table"]), cell("CloudProof es un Evidence Plane neutral a agente/humano/CI; no un framework de agentes.", styles["table"]), cell("Aceptada", styles["table"]), cell("Al finalizar 1.X", styles["table"])],
         [cell("D-019", styles["table"]), cell("Fase 1.X Assurance Kernel debe cerrar alcance, seguridad, Bundle v2, fast path y matriz antes de Fase 2.", styles["table"]), cell("Aceptada", styles["table"]), cell("Cada gate P0/P1", styles["table"])],
         [cell("D-020", styles["table"]), cell("Estandar abierto se inicia como especificacion y conformance suite; no se declara estandar antes de pluralidad de implementaciones/consumidores.", styles["table"]), cell("Aceptada", styles["table"]), cell("Primer consumidor externo", styles["table"])],
-        [cell("D-021", styles["table"]), cell("Atlas y otros analizadores son inputs complementarios. Proof compite por evidencia de transicion, no por reimplementar todos los linters.", styles["table"]), cell("Aceptada", styles["table"]), cell("Adapter de entrada", styles["table"])],
+        [cell("D-021", styles["table"]), cell("Atlas y otros analizadores son inputs complementarios. CloudProof compite por evidencia de transicion, no por reimplementar todos los linters.", styles["table"]), cell("Aceptada", styles["table"]), cell("Adapter de entrada", styles["table"])],
         [cell("D-022", styles["table"]), cell("Un claim de seguridad exige un secure execution envelope y redaccion comprobable; local trusted y fork untrusted son productos distintos.", styles["table"]), cell("Propuesta", styles["table"]), cell("Threat model RFC", styles["table"])],
     ]
     decisions_table = Table(decisions_rows, colWidths=[16 * mm, 98 * mm, 26 * mm, 34 * mm], repeatRows=1)
@@ -507,9 +507,9 @@ def build_addendum() -> None:
     story += [para("Backlog nuevo", styles["h2"])]
     story += bullets(
         [
-            "I-014 - Proof Plan and Assurance Ladder - DESIGN - definir schema, selector de riesgo, costos y UX L0-L3.",
-            "I-015 - Proof Bundle v2 and conformance suite - DESIGN - especificacion semantica, redaction, provenance y validator.",
-            "I-016 - Secure Proof Runner - RESEARCH - RFC de threat model, perfiles de confianza y pruebas de aislamiento.",
+            "I-014 - CloudProof Plan and Assurance Ladder - DESIGN - definir schema, selector de riesgo, costos y UX L0-L3.",
+            "I-015 - CloudProof Bundle v2 and conformance suite - DESIGN - especificacion semantica, redaction, provenance y validator.",
+            "I-016 - Secure CloudProof Runner - RESEARCH - RFC de threat model, perfiles de confianza y pruebas de aislamiento.",
             "I-017 - Agent Fitness Benchmark - RESEARCH - corpus, harnesses, metricas de declaracion prematura y evaluacion de tools.",
             "I-018 - Static Evidence Adapters - RESEARCH - Atlas/SARIF, drift detector y reglas propias solo cuando haya evidencia de hueco.",
             "I-019 - Release Matrix Completion - COMMITTED - A1+S0, coexistencia, A1+S1 y rollback con writes de A1 antes de Fase 2.",
@@ -541,7 +541,7 @@ def build_addendum() -> None:
     ]
     story += [para(item, styles["small"]) for item in sources]
     story += [Spacer(1, 4 * mm), para("Cierre v0.3", styles["h2"])]
-    story += [para("La ambicion correcta no es sumar agentes, dashboards o analisis para parecer mas completo. Es volver inevitable una disciplina: ninguna afirmacion de release importante se acepta sin evidencia proporcionada al riesgo, interpretable por cualquiera y segura de ejecutar. Si Proof logra eso primero en un slice estrecho y lo abre como contrato, puede convertirse en infraestructura de confianza del desarrollo agentic en lugar de una feature de un agente.", styles["body"])]
+    story += [para("La ambicion correcta no es sumar agentes, dashboards o analisis para parecer mas completo. Es volver inevitable una disciplina: ninguna afirmacion de release importante se acepta sin evidencia proporcionada al riesgo, interpretable por cualquiera y segura de ejecutar. Si CloudProof logra eso primero en un slice estrecho y lo abre como contrato, puede convertirse en infraestructura de confianza del desarrollo agentic en lugar de una feature de un agente.", styles["body"])]
 
     document.build(story, onFirstPage=doc_header_footer, onLaterPages=doc_header_footer)
 
@@ -554,8 +554,8 @@ def merge_with_thesis() -> None:
             writer.add_page(page)
     writer.add_metadata({
         "/Title": "Tesis de Producto - Developer Reliability Platform v0.3",
-        "/Author": "Proof",
-        "/Subject": "Addendum estrategico: Proof beyond agents",
+        "/Author": "CloudProof",
+        "/Subject": "Addendum estrategico: CloudProof beyond agents",
         "/Keywords": "release safety, evidence, agents, MCP, reliability",
     })
     with FINAL.open("wb") as output:

@@ -1,6 +1,6 @@
-// Deja el binario `proof` disponible en el PATH global via `npm link`,
+// Deja el binario `cloudproof` disponible en el PATH global via `npm link`,
 // ejecutado desde packages/cli. Multiplataforma (Windows crea los shims
-// proof.cmd/proof.ps1; POSIX un symlink). Los workspace:* ya quedaron
+// cloudproof.cmd/cloudproof.ps1; POSIX un symlink). Los workspace:* ya quedaron
 // materializados por `pnpm install`, así que el paquete linkeado resuelve
 // sus dependencias contra el árbol real del repo.
 import { spawnSync } from "node:child_process";
@@ -21,4 +21,4 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
-console.log("\n√ `proof` quedó disponible globalmente. Probalo con: proof");
+console.log("\n√ `cloudproof` quedó disponible globalmente. Probalo con: cloudproof");

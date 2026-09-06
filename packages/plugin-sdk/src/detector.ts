@@ -8,9 +8,9 @@
 
 export interface DetectionResult {
   detected: boolean;
-  /** Ej. "postgres", "prisma", "github-actions". Debe coincidir con el DataKind/ServiceKind de @proof/config cuando aplique. */
+  /** Ej. "postgres", "prisma", "github-actions". Debe coincidir con el DataKind/ServiceKind de @cloudproof/config cuando aplique. */
   kind: string;
-  /** Evidencia legible de por qué se detectó (ej. archivo encontrado), para que "proof init" pueda mostrarla. */
+  /** Evidencia legible de por qué se detectó (ej. archivo encontrado), para que "cloudproof init" pueda mostrarla. */
   evidence: string[];
 }
 

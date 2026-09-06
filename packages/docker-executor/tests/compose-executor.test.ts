@@ -17,7 +17,7 @@ const SHA12 = FULL_SHA.slice(0, 12);
 
 function migratorTag(prisma: string): string {
   const identity = JSON.stringify({ recipe: "v2", base: "node:20-bookworm", prisma });
-  return `proof-prisma-migrator:${createHash("sha256").update(identity).digest("hex").slice(0, 16)}`;
+  return `cloudproof-prisma-migrator:${createHash("sha256").update(identity).digest("hex").slice(0, 16)}`;
 }
 
 /** Réplica de la identidad del tag de buildImage (rutas + bytes del Dockerfile). */
@@ -42,7 +42,7 @@ function appTag(spec: {
     )
     .digest("hex")
     .slice(0, 8);
-  return `proof-app:${SHA12}-${identity}`;
+  return `cloudproof-app:${SHA12}-${identity}`;
 }
 
 let tmp: string;
@@ -74,7 +74,7 @@ function makeExecutor(runner: FakeRunner, extra: Record<string, unknown> = {}): 
 }
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), "proof-ut-"));
+  tmp = mkdtempSync(join(tmpdir(), "cloudproof-ut-"));
   worktreesDir = join(tmp, "wt");
   mkdirSync(worktreesDir, { recursive: true });
 });
@@ -89,7 +89,7 @@ function inspectMissResponder(): Responder {
       command === "docker" &&
       args[0] === "image" &&
       args[1] === "inspect" &&
-      String(args[2] ?? "").startsWith("proof-app:")
+      String(args[2] ?? "").startsWith("cloudproof-app:")
     ) {
       return { exitCode: 1, stderr: "No such image" };
     }
@@ -113,7 +113,7 @@ describe("buildImage", () => {
     const tag = await makeExecutor(runner).buildImage({ sha: FULL_SHA, servicePath: "." });
 
     expect(tag).toBe(expectedTag);
-    expect(runner.count("docker build", "-t", expectedTag, "--label dev.proof.owner=proof")).toBe(1);
+    expect(runner.count("docker build", "-t", expectedTag, "--label dev.cloudproof.owner=cloudproof")).toBe(1);
   });
 
   it("no rebuildea si la imagen ya existe (cache por tag)", async () => {
@@ -126,14 +126,14 @@ describe("buildImage", () => {
     expect(runner.count("docker build")).toBe(0);
   });
 
-  it("PROOF_FORCE_REBUILD=1 saltea el hit de cache y reconstruye", async () => {
+  it("CLOUDPROOF_FORCE_REBUILD=1 saltea el hit de cache y reconstruye", async () => {
     seedWorktree({ Dockerfile: rootDockerfile });
     const runner = new FakeRunner(gitCachedWorktree(FULL_SHA)); // inspect daría hit
-    process.env["PROOF_FORCE_REBUILD"] = "1";
+    process.env["CLOUDPROOF_FORCE_REBUILD"] = "1";
     try {
       await makeExecutor(runner).buildImage({ sha: FULL_SHA, servicePath: "." });
     } finally {
-      delete process.env["PROOF_FORCE_REBUILD"];
+      delete process.env["CLOUDPROOF_FORCE_REBUILD"];
     }
     expect(runner.count("docker build")).toBe(1);
   });
@@ -390,20 +390,20 @@ describe("startEphemeralPostgres", () => {
     });
 
     expect(pg.id).toBe("pgcid");
-    expect(pg.serviceName).toMatch(/^proof-pg-s1-test-/);
-    expect(pg.connectionUrl).toBe(`postgresql://proof:proof@${pg.serviceName}:5432/proof`);
-    expect(pg.hostConnectionUrl).toBe("postgresql://proof:proof@127.0.0.1:49701/proof");
+    expect(pg.serviceName).toMatch(/^cloudproof-pg-s1-test-/);
+    expect(pg.connectionUrl).toBe(`postgresql://cloudproof:cloudproof@${pg.serviceName}:5432/cloudproof`);
+    expect(pg.hostConnectionUrl).toBe("postgresql://cloudproof:cloudproof@127.0.0.1:49701/cloudproof");
     // 1 sonda del postmaster temporal + 2 confirmaciones consecutivas del
     // definitivo. pg_isready no participa más del readiness.
     expect(state.probeCalls).toBe(3);
     expect(runner.count("pg_isready")).toBe(0);
     expect(runner.count("-h 127.0.0.1", "SELECT 1, pg_postmaster_start_time();")).toBe(3);
-    expect(runner.count("network create", "--label dev.proof.owner=proof")).toBe(1);
+    expect(runner.count("network create", "--label dev.cloudproof.owner=cloudproof")).toBe(1);
     expect(runner.count(migratorTag("6"), "migrate deploy", "--schema /repo/prisma/schema.prisma")).toBe(1);
     // Workdir neutro: el migrador no debe auto-cargar prisma.config.ts del repo.
-    expect(runner.count("-w /opt/proof-migrator", "migrate deploy")).toBe(1);
+    expect(runner.count("-w /opt/cloudproof-migrator", "migrate deploy")).toBe(1);
     expect(runner.count(`${dir}:/repo:ro`)).toBe(1);
-    expect(runner.count(`DATABASE_URL=postgresql://proof:proof@${pg.serviceName}:5432/proof`)).toBe(1);
+    expect(runner.count(`DATABASE_URL=postgresql://cloudproof:cloudproof@${pg.serviceName}:5432/cloudproof`)).toBe(1);
     expect(runner.count("--memory 1g", "--cpus 1", "--pids-limit 256", "no-new-privileges:true")).toBeGreaterThanOrEqual(2);
   });
 
@@ -450,9 +450,9 @@ describe("startEphemeralPostgres", () => {
       .find((line) => line.includes("migrate deploy"));
     expect(migrate).toBeDefined();
     expect(migrate).not.toContain("--schema");
-    expect(migrate).toContain(":/opt/proof-migrator/prisma.config.ts:ro");
-    expect(migrate).toContain("PROOF_PRISMA_SCHEMA=/repo/prisma/schema");
-    expect(migrate).toContain("PROOF_PRISMA_MIGRATIONS=/repo/prisma/migrations");
+    expect(migrate).toContain(":/opt/cloudproof-migrator/prisma.config.ts:ro");
+    expect(migrate).toContain("CLOUDPROOF_PRISMA_SCHEMA=/repo/prisma/schema");
+    expect(migrate).toContain("CLOUDPROOF_PRISMA_MIGRATIONS=/repo/prisma/migrations");
   });
 
   it("acepta un prismaSchema explícito que apunta a una carpeta", async () => {
@@ -510,8 +510,8 @@ describe("startEphemeralPostgres", () => {
 
     const migrate = runner.lines().find((line) => line.includes("migrate deploy"));
     expect(migrate).not.toContain("--schema");
-    expect(migrate).toContain("PROOF_PRISMA_SCHEMA=/repo/packages/database/prisma/schema.prisma");
-    expect(migrate).toContain("PROOF_PRISMA_MIGRATIONS=/repo/packages/database/prisma/migrations");
+    expect(migrate).toContain("CLOUDPROOF_PRISMA_SCHEMA=/repo/packages/database/prisma/schema.prisma");
+    expect(migrate).toContain("CLOUDPROOF_PRISMA_MIGRATIONS=/repo/packages/database/prisma/migrations");
   });
 
   it("falla explícitamente si el commit no tiene schema Prisma, sin correr migraciones", async () => {
@@ -538,9 +538,9 @@ describe("startEphemeralPostgres", () => {
 
     expect(runner.count("exec source-s0 pg_dump", "--no-owner", "--no-privileges")).toBe(1);
     expect(runner.count("cp source-s0:")).toBe(1);
-    expect(runner.count("cp", "pgcid:/tmp/proof-s0-")).toBe(1);
-    expect(runner.count("exec pgcid psql", "-f /tmp/proof-s0-")).toBe(1);
-    const restoreIndex = runner.lines().findIndex((line) => line.includes("-f /tmp/proof-s0-"));
+    expect(runner.count("cp", "pgcid:/tmp/cloudproof-s0-")).toBe(1);
+    expect(runner.count("exec pgcid psql", "-f /tmp/cloudproof-s0-")).toBe(1);
+    const restoreIndex = runner.lines().findIndex((line) => line.includes("-f /tmp/cloudproof-s0-"));
     const migrateIndex = runner.lines().findIndex(
       (line) => line.includes(migratorTag("latest")) && line.includes("migrate deploy"),
     );
@@ -605,7 +605,7 @@ describe("startApp", () => {
     const runner = new FakeRunner((command, args) => {
       if (command !== "docker") return undefined;
       const line = args.join(" ");
-      if (args[0] === "run" && line.endsWith("proof-app:x")) return { stdout: "appcid\n" };
+      if (args[0] === "run" && line.endsWith("cloudproof-app:x")) return { stdout: "appcid\n" };
       if (args[0] === "run" && line.includes("node:20-alpine node -e")) {
         return { stdout: "proxycid\n" };
       }
@@ -616,16 +616,16 @@ describe("startApp", () => {
     });
     const executor = makeExecutor(runner, { blockEgress: true });
 
-    const app = await executor.startApp("proof-app:x", { PORT: "3000" });
+    const app = await executor.startApp("cloudproof-app:x", { PORT: "3000" });
     await executor.teardown(app.id);
 
-    const targetRun = runner.lines().find((line) => line.endsWith("proof-app:x"));
-    expect(targetRun).toContain("--network proof-net-test");
+    const targetRun = runner.lines().find((line) => line.endsWith("cloudproof-app:x"));
+    expect(targetRun).toContain("--network cloudproof-net-test");
     expect(targetRun).not.toContain(" -p ");
-    expect(runner.count("network create --internal", "proof-net-test")).toBe(1);
-    expect(runner.count("network create", "proof-access-test")).toBe(1);
-    expect(runner.count("--network proof-access-test", "-p 127.0.0.1:0:3000")).toBe(1);
-    expect(runner.count("network connect proof-net-test proxycid")).toBe(1);
+    expect(runner.count("network create --internal", "cloudproof-net-test")).toBe(1);
+    expect(runner.count("network create", "cloudproof-access-test")).toBe(1);
+    expect(runner.count("--network cloudproof-access-test", "-p 127.0.0.1:0:3000")).toBe(1);
+    expect(runner.count("network connect cloudproof-net-test proxycid")).toBe(1);
     expect(runner.count("rm -f proxycid")).toBe(1);
     expect(runner.count("rm -f appcid")).toBe(1);
   });
@@ -638,7 +638,7 @@ describe("startApp", () => {
       return undefined;
     });
 
-    const app = await makeExecutor(runner).startApp("proof-app:x", { PORT: "8080" });
+    const app = await makeExecutor(runner).startApp("cloudproof-app:x", { PORT: "8080" });
 
     expect(app.connectionUrl).toBe("http://127.0.0.1:50000");
     expect(runner.count("-p 127.0.0.1:0:8080")).toBe(1);
@@ -658,7 +658,7 @@ describe("startApp", () => {
       return undefined;
     });
 
-    await makeExecutor(runner).startApp("proof-app:x", {});
+    await makeExecutor(runner).startApp("cloudproof-app:x", {});
 
     expect(runner.count("-p 127.0.0.1:0:3000")).toBe(1);
   });
@@ -671,7 +671,7 @@ describe("startApp", () => {
       return undefined;
     });
 
-    await expect(makeExecutor(runner).startApp("proof-app:x", {})).rejects.toThrow(/env\.PORT|EXPOSE/);
+    await expect(makeExecutor(runner).startApp("cloudproof-app:x", {})).rejects.toThrow(/env\.PORT|EXPOSE/);
   });
 
   it("si el contenedor muere antes del readiness, el error incluye los logs como evidencia", async () => {
@@ -687,7 +687,7 @@ describe("startApp", () => {
     });
     const executor = makeExecutor(runner, { httpProbe: async () => false });
 
-    const failure = await executor.startApp("proof-app:x", { PORT: "3000" }).then(
+    const failure = await executor.startApp("cloudproof-app:x", { PORT: "3000" }).then(
       () => null,
       (error: unknown) => error,
     );
@@ -730,26 +730,26 @@ describe("teardown y limpieza", () => {
 
     await makeExecutor(runner).disposeRun();
 
-    expect(runner.count("ps -aq --filter label=dev.proof.run=test")).toBe(1);
+    expect(runner.count("ps -aq --filter label=dev.cloudproof.run=test")).toBe(1);
     expect(runner.count("rm -f id1")).toBe(1);
     expect(runner.count("rm -f id2")).toBe(1);
-    expect(runner.count("network rm proof-net-test")).toBe(1);
+    expect(runner.count("network rm cloudproof-net-test")).toBe(1);
   });
 
   it("sweepAll barre contenedores y redes de CUALQUIER corrida por owner label", async () => {
     const runner = new FakeRunner((command, args) => {
       if (command === "docker" && args[0] === "ps") {
-        return { stdout: "old1\tproof-pg-old\told\n" };
+        return { stdout: "old1\tcloudproof-pg-old\told\n" };
       }
       if (command === "docker" && args[0] === "network" && args[1] === "ls") {
-        return { stdout: "net1\tproof-net-old\told\n" };
+        return { stdout: "net1\tcloudproof-net-old\told\n" };
       }
       return undefined;
     });
 
     await ComposeExecutor.sweepAll(runner);
 
-    expect(runner.count("ps -a --filter label=dev.proof.owner=proof")).toBe(1);
+    expect(runner.count("ps -a --filter label=dev.cloudproof.owner=cloudproof")).toBe(1);
     expect(runner.count("rm -f old1")).toBe(1);
     expect(runner.count("network rm net1")).toBe(1);
   });

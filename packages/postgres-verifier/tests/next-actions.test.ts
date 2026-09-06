@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveNextActions } from "../dist/index.js";
-import type { Assertion, Coverage, Remediation } from "@proof/schema";
+import type { Assertion, Coverage, Remediation } from "@cloudproof/schema";
 
 const declaredCoverage: Coverage = {
   routesObserved: 2,
@@ -44,7 +44,7 @@ describe("deriveNextActions — invariantes", () => {
         id: "postgres.old-app-new-schema.post-payments",
         result: "fail",
         evidence: ["POST /payments failed 3/3."],
-        reproduction: "proof reproduce postgres.old-app-new-schema.post-payments",
+        reproduction: "cloudproof reproduce postgres.old-app-new-schema.post-payments",
         remediation,
       },
     ];
@@ -55,7 +55,7 @@ describe("deriveNextActions — invariantes", () => {
     expect(actions[0]).toMatchObject({
       kind: "apply-remediation",
       assertionId: "postgres.old-app-new-schema.post-payments",
-      command: "proof reproduce postgres.old-app-new-schema.post-payments",
+      command: "cloudproof reproduce postgres.old-app-new-schema.post-payments",
     });
     expect(actions[0]?.instruction).toContain("postgres.not-null-column-old-app-writes");
     expect(actions[0]?.instruction).toContain("approvals are a human decision");
@@ -187,7 +187,7 @@ describe("deriveNextActions — invariantes", () => {
     });
     expect(
       actions.find((action) => action.kind === "exercise-route")?.instruction,
-    ).toContain("PROOF_BASE_URL");
+    ).toContain("CLOUDPROOF_BASE_URL");
   });
 
   it("sin workload declarado → add-workload apuntando al configPath", () => {
@@ -205,7 +205,7 @@ describe("deriveNextActions — invariantes", () => {
     });
   });
 
-  it("workload declarado pero sin tráfico grabado → señalar PROOF_BASE_URL", () => {
+  it("workload declarado pero sin tráfico grabado → señalar CLOUDPROOF_BASE_URL", () => {
     const actions = deriveNextActions(
       [],
       declaredCoverage,
@@ -214,7 +214,7 @@ describe("deriveNextActions — invariantes", () => {
     );
 
     const workloadAction = actions.find((action) => action.kind === "add-workload");
-    expect(workloadAction?.instruction).toContain("PROOF_BASE_URL");
+    expect(workloadAction?.instruction).toContain("CLOUDPROOF_BASE_URL");
   });
 
   it("sql-effects omitida por falta de escrituras no duplica rerun-stage (la cubre add-write-workload)", () => {

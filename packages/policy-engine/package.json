@@ -1,7 +1,7 @@
 {
-  "name": "@proof/policy-engine",
+  "name": "@cloudproof/policy-engine",
   "version": "0.0.1",
-  "description": "Evaluación determinista de invariantes organizacionales sobre un Proof Bundle",
+  "description": "Evaluación determinista de invariantes organizacionales sobre un CloudProof Bundle",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,7 +21,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@proof/schema": "workspace:*"
+    "@cloudproof/schema": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

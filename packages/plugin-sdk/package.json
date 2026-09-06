@@ -1,5 +1,5 @@
 {
-  "name": "@proof/plugin-sdk",
+  "name": "@cloudproof/plugin-sdk",
   "version": "0.0.1",
   "description": "Interfaz para plugins de detección de stack y adaptadores de ejecución",
   "license": "SEE LICENSE IN LICENSE",

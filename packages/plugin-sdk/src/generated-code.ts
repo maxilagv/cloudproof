@@ -8,7 +8,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
  * esta capa los detectores lo confundían con un segundo servicio ejecutable.
  *
  * La clasificación es por EVIDENCIA, nunca por adivinanza, y siempre produce
- * una razón legible para que `proof init` pueda mostrarla:
+ * una razón legible para que `cloudproof init` pueda mostrarla:
  *
  *  1. La ruta está dentro del `output` declarado por un `generator` del
  *     propio schema Prisma del repo (la fuente de verdad más fuerte).

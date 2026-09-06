@@ -54,7 +54,7 @@ function inspectMissResponder(): Responder {
       command === "docker" &&
       args[0] === "image" &&
       args[1] === "inspect" &&
-      String(args[2] ?? "").startsWith("proof-app:")
+      String(args[2] ?? "").startsWith("cloudproof-app:")
     ) {
       return { exitCode: 1, stderr: "No such image" };
     }
@@ -76,7 +76,7 @@ function makeExecutor(runner: FakeRunner): ComposeExecutor {
 }
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), "proof-df-head-"));
+  tmp = mkdtempSync(join(tmpdir(), "cloudproof-df-head-"));
   worktreesDir = join(tmp, "wt");
   mkdirSync(worktreesDir, { recursive: true });
 });

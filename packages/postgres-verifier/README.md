@@ -1,4 +1,4 @@
-# @proof/postgres-verifier
+# @cloudproof/postgres-verifier
 
 Núcleo de evidencia estática y dinámica para releases PostgreSQL + Prisma.
 

@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { generatedSegmentOf } from "@proof/plugin-sdk";
+import { generatedSegmentOf } from "@cloudproof/plugin-sdk";
 
 /**
  * Clasificación de variables de .env.example por EVIDENCIA de uso en el
@@ -15,7 +15,7 @@ import { generatedSegmentOf } from "@proof/plugin-sdk";
  *  - unreferenced: documentada pero ningún archivo la lee.
  *
  * Es un análisis léxico determinista y acotado, no un type-checker: por eso
- * la severidad aguas arriba nunca supera MEDIUM y proof.config puede
+ * la severidad aguas arriba nunca supera MEDIUM y cloudproof.config puede
  * declarar overrides (env.required / env.optional) cuando el repo sabe más.
  */
 
@@ -47,7 +47,7 @@ const IGNORED_DIRECTORIES = new Set([
   ".next",
   ".turbo",
   "coverage",
-  ".proof",
+  ".cloudproof",
 ]);
 const MAX_FILES = 4_000;
 const MAX_FILE_BYTES = 1_536 * 1024;

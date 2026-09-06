@@ -3,12 +3,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync 
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ComposeExecutor, SpawnRunner } from "@proof/docker-executor";
-import { verifyRelease } from "@proof/postgres-verifier";
+import { ComposeExecutor, SpawnRunner } from "@cloudproof/docker-executor";
+import { verifyRelease } from "@cloudproof/postgres-verifier";
 
 /**
  * E2E de la Subfase 1.C: la demo canónica de la tesis (19.5) de punta a
- * punta contra Docker REAL, sin ningún mock. Gated por PROOF_DOCKER_IT=1
+ * punta contra Docker REAL, sin ningún mock. Gated por CLOUDPROOF_DOCKER_IT=1
  * (mismo patrón que docker-executor): sin el flag se skipea; con el flag
  * y sin daemon, falla ruidosamente.
  *
@@ -22,7 +22,7 @@ import { verifyRelease } from "@proof/postgres-verifier";
  * Nota: el Dockerfile del fixture usa npm DENTRO del contenedor (la regla
  * de pnpm del equipo aplica al host, que acá nunca ejecuta npm).
  */
-const enabled = process.env["PROOF_DOCKER_IT"] === "1";
+const enabled = process.env["CLOUDPROOF_DOCKER_IT"] === "1";
 
 if (enabled) {
   const probe = await new SpawnRunner()
@@ -30,7 +30,7 @@ if (enabled) {
     .catch(() => ({ exitCode: -1, stdout: "", stderr: "docker no ejecutable" }));
   if (probe.exitCode !== 0) {
     throw new Error(
-      `PROOF_DOCKER_IT=1 pero el daemon de Docker no responde:\n${probe.stderr.slice(-500)}`,
+      `CLOUDPROOF_DOCKER_IT=1 pero el daemon de Docker no responde:\n${probe.stderr.slice(-500)}`,
     );
   }
 }
@@ -93,9 +93,9 @@ server.listen(3000);
 // el child — y un workload que crashea es, correctamente, baseline FAIL.
 const E2E_MJS = `import { request } from "node:http";
 
-const base = process.env.PROOF_BASE_URL;
+const base = process.env.CLOUDPROOF_BASE_URL;
 if (!base) {
-  console.error("PROOF_BASE_URL no está definida");
+  console.error("CLOUDPROOF_BASE_URL no está definida");
   process.exit(1);
 }
 
@@ -161,7 +161,7 @@ const BASE_FILES: Record<string, string> = {
   ].join("\n"),
   "server.mjs": SERVER_MJS,
   "scripts/e2e.mjs": E2E_MJS,
-  "proof.config.ts": `export default {
+  "cloudproof.config.ts": `export default {
   services: { api: { kind: "node", path: "." } },
   data: { postgres: { kind: "postgres" } },
   release: { strategy: "migration-first", rollback: "application" },
@@ -191,14 +191,14 @@ describe.skipIf(!enabled)("Subfase 1.C — demo canónica end-to-end", () => {
   let benignSha: string;
 
   beforeAll(async () => {
-    tmp = mkdtempSync(join(tmpdir(), "proof-e2e-"));
+    tmp = mkdtempSync(join(tmpdir(), "cloudproof-e2e-"));
     repo = join(tmp, "repo");
     mkdirSync(repo);
     writeFiles(repo, BASE_FILES);
 
     await sh("git", ["init", "-b", "main"], repo);
-    await sh("git", ["config", "user.email", "e2e@proof.local"], repo);
-    await sh("git", ["config", "user.name", "proof-e2e"], repo);
+    await sh("git", ["config", "user.email", "e2e@cloudproof.local"], repo);
+    await sh("git", ["config", "user.name", "cloudproof-e2e"], repo);
     await sh("git", ["add", "-A"], repo);
     await sh("git", ["commit", "-m", "base: payments(id, amount)"], repo);
     baseSha = await sh("git", ["rev-parse", "HEAD"], repo);
@@ -247,30 +247,30 @@ describe.skipIf(!enabled)("Subfase 1.C — demo canónica end-to-end", () => {
     expect(result.exitCode, context).toBe(0);
     expect(result.stdout, context).toContain("Tests normales: PASS");
     expect(result.stdout, context).toContain("Migration: APPLIED");
-    expect(result.stdout, context).toContain("RELEASE PROOF: UNSAFE");
+    expect(result.stdout, context).toContain("RELEASE CLOUDPROOF: UNSAFE");
     expect(result.stdout, context).toContain("Old application cannot write to migrated schema.");
     expect(result.stdout, context).toContain("POST /payments failed 3/3.");
     expect(result.stdout, context).toContain("SQLSTATE 23502");
     expect(result.stdout, context).toContain("Recommended:");
     expect(result.stdout, context).toContain("1. Add nullable column");
     expect(result.stdout, context).toContain(
-      "Reproduce: proof reproduce postgres.old-app-new-schema.post-payments",
+      "Reproduce: cloudproof reproduce postgres.old-app-new-schema.post-payments",
     );
     expect(result.stdout, context).toContain("[policy] no-destructive-migrations");
 
-    // El bundle quedó persistido para proof reproduce (1.D).
-    const proofDir = join(repo, ".proof");
-    expect(existsSync(proofDir)).toBe(true);
-    expect(readdirSync(proofDir).some((f) => f.startsWith("release-verify-"))).toBe(true);
+    // El bundle quedó persistido para cloudproof reproduce (1.D).
+    const cloudproofDir = join(repo, ".cloudproof");
+    expect(existsSync(cloudproofDir)).toBe(true);
+    expect(readdirSync(cloudproofDir).some((f) => f.startsWith("release-verify-"))).toBe(true);
 
     // Cero residuos: la CLI hizo disposeRun de su corrida.
     const leftovers = await runner.run("docker", [
       "ps",
       "-aq",
       "--filter",
-      "label=dev.proof.owner=proof",
+      "label=dev.cloudproof.owner=cloudproof",
     ]);
-    expect(leftovers.stdout.trim(), "contenedores proof residuales tras la CLI").toBe("");
+    expect(leftovers.stdout.trim(), "contenedores cloudproof residuales tras la CLI").toBe("");
   }, 600_000);
 
   it("cambio benigno (columna nullable) → VERIFIED, sin falsos positivos por timestamps", async () => {

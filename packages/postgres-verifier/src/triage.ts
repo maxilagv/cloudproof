@@ -7,8 +7,8 @@ import {
   type CommandResult,
   type CommandRunner,
   type ExecutionProfile,
-} from "@proof/docker-executor";
-import type { ExecutionState } from "@proof/schema";
+} from "@cloudproof/docker-executor";
+import type { ExecutionState } from "@cloudproof/schema";
 
 /**
  * Static, deterministic release triage.  This module deliberately emits a
@@ -39,7 +39,7 @@ export type ChangeCategory =
   | "sql"
   | "build"
   | "dependency"
-  | "proof-config"
+  | "cloudproof-config"
   | "runtime-config"
   | "automation"
   | "application"
@@ -104,7 +104,7 @@ export interface ReleaseTriageInput {
 }
 
 export interface ReleaseTriagePlan {
-  kind: "proof.release-plan";
+  kind: "cloudproof.release-plan";
   version: "1";
   decision: "PLAN_ONLY_NOT_VERIFIED";
   ruleset: string;
@@ -194,7 +194,7 @@ const CATEGORY_ORDER: ChangeCategory[] = [
   "sql",
   "build",
   "dependency",
-  "proof-config",
+  "cloudproof-config",
   "runtime-config",
   "automation",
   "application",
@@ -337,7 +337,7 @@ function categoryFor(path: string, servicePath?: string, prismaSchemaPath?: stri
   ) {
     return "dependency";
   }
-  if (/^proof\.config\.(ts|js|mjs|cjs|json)$/i.test(path)) return "proof-config";
+  if (/^cloudproof\.config\.(ts|js|mjs|cjs|json)$/i.test(path)) return "cloudproof-config";
   if (
     /(^|\/)(\.env($|\.)|.*\.pem$|.*\.key$|secrets?\.(ya?ml|json)$)/i.test(path)
   ) {
@@ -1148,7 +1148,7 @@ function inspectFiles(state: PlanningState, files: InspectedFile[]): void {
 
     if (file.category === "build") state.securityFlags.add("BUILD_SURFACE_CHANGED");
     if (file.category === "dependency") state.securityFlags.add("DEPENDENCY_GRAPH_CHANGED");
-    if (file.category === "proof-config") state.securityFlags.add("EXECUTABLE_PROOF_CONFIG_CHANGED");
+    if (file.category === "cloudproof-config") state.securityFlags.add("EXECUTABLE_CLOUDPROOF_CONFIG_CHANGED");
     if (file.category === "automation") state.securityFlags.add("CI_AUTOMATION_CHANGED");
     if (file.category === "privacy") {
       state.securityFlags.add("SECRET_BEARING_FILE_CHANGED");
@@ -1158,7 +1158,7 @@ function inspectFiles(state: PlanningState, files: InspectedFile[]): void {
       state.privacyFlags.add("OBSERVABILITY_OR_CAPTURE_CODE_CHANGED");
     }
     if (
-      (file.category === "proof-config" || file.category === "runtime-config") &&
+      (file.category === "cloudproof-config" || file.category === "runtime-config") &&
       /(?:token|password|passwd|secret|authorization|cookie|api[-_]?key|private[-_]?key)/i.test(
         file.head?.content ?? "",
       )
@@ -1211,10 +1211,10 @@ function inspectFiles(state: PlanningState, files: InspectedFile[]): void {
       detail: "El lockfile o manifest puede cambiar runtime, scripts de instalacion y reproducibilidad.",
     },
     {
-      category: "proof-config",
-      code: "EXECUTABLE_PROOF_CONFIG_CHANGED",
+      category: "cloudproof-config",
+      code: "EXECUTABLE_CLOUDPROOF_CONFIG_CHANGED",
       risk: "high",
-      title: "Configuracion ejecutable de Proof modificada",
+      title: "Configuracion ejecutable de CloudProof modificada",
       detail: "El plan de verificacion cambio dentro del candidato y debe tratarse como codigo no confiable en forks.",
     },
     {
@@ -1289,7 +1289,7 @@ function shouldReadContent(category: ChangeCategory): boolean {
     "sql",
     "build",
     "dependency",
-    "proof-config",
+    "cloudproof-config",
     "runtime-config",
     "automation",
   ].includes(category);
@@ -1315,7 +1315,7 @@ function deriveAssurance(
     ["migration", "prisma-schema", "sql"].includes(file.category),
   );
   const executableChanged = files.some((file) =>
-    ["build", "dependency", "proof-config", "runtime-config", "automation", "application", "privacy"].includes(
+    ["build", "dependency", "cloudproof-config", "runtime-config", "automation", "application", "privacy"].includes(
       file.category,
     ),
   );
@@ -1398,7 +1398,7 @@ function commandsFor(
     executionProfile,
   ];
   const verify: TriageCommand = {
-    command: "proof",
+    command: "cloudproof",
     args: verifyArgs,
     reason: assurance.executionRequired
       ? "Ejecutar la matriz requerida; este plan estatico nunca emite VERIFIED."
@@ -1406,9 +1406,9 @@ function commandsFor(
   };
   if (input.configuration?.loaded === false) {
     const doctor: TriageCommand = {
-      command: "proof",
+      command: "cloudproof",
       args: ["doctor"],
-      reason: "Corregir o generar proof.config antes de ejecutar la matriz.",
+      reason: "Corregir o generar cloudproof.config antes de ejecutar la matriz.",
     };
     return { nextCommand: doctor, nextActions: [doctor, verify] };
   }
@@ -1569,7 +1569,7 @@ export async function planRelease(
       code: "ANALYSIS_INCOMPLETE",
       risk: "high",
       title: "Triage incompleto",
-      detail: "Proof no pudo inspeccionar toda la evidencia; no es seguro reducir la matriz.",
+      detail: "CloudProof no pudo inspeccionar toda la evidencia; no es seguro reducir la matriz.",
       evidence: [{ path: "(triage)", side: "metadata" }],
     });
   }
@@ -1595,7 +1595,7 @@ export async function planRelease(
   }));
 
   return {
-    kind: "proof.release-plan",
+    kind: "cloudproof.release-plan",
     version: "1",
     decision: "PLAN_ONLY_NOT_VERIFIED",
     ruleset: TRIAGE_RULESET_VERSION,

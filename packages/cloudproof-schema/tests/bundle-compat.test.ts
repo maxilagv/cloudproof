@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ProofBundleSchema, RemediationSchema, NextActionSchema } from "../dist/index.js";
+import { CloudProofBundleSchema, RemediationSchema, NextActionSchema } from "../dist/index.js";
 
 /**
  * remediation y nextActions son adiciones COMPATIBLES dentro de la versión
- * "1" del Proof Bundle: un bundle previo (sin esos campos) debe seguir
+ * "1" del CloudProof Bundle: un bundle previo (sin esos campos) debe seguir
  * validando sin migración, y el parseo debe defaultear nextActions a [].
  */
 const legacyBundle = {
@@ -15,22 +15,22 @@ const legacyBundle = {
       id: "postgres.old-app-new-schema.post-payments",
       result: "fail",
       evidence: ["POST /payments failed 18/18", "SQLSTATE 23502"],
-      reproduction: "proof reproduce postgres.old-app-new-schema.post-payments",
+      reproduction: "cloudproof reproduce postgres.old-app-new-schema.post-payments",
     },
   ],
   coverage: { routesObserved: 18, routesDetected: 24 },
   provenance: { runner: "run-1", artifacts: ["sha256:x"] },
 };
 
-describe("Proof Bundle v1 — compatibilidad de adiciones", () => {
+describe("CloudProof Bundle v1 — compatibilidad de adiciones", () => {
   it("un bundle previo sin remediation/nextActions valida y defaultea nextActions a []", () => {
-    const parsed = ProofBundleSchema.parse(legacyBundle);
+    const parsed = CloudProofBundleSchema.parse(legacyBundle);
     expect(parsed.nextActions).toEqual([]);
     expect(parsed.assertions[0]?.remediation).toBeUndefined();
   });
 
   it("un bundle nuevo con remediation y nextActions valida completo", () => {
-    const parsed = ProofBundleSchema.parse({
+    const parsed = CloudProofBundleSchema.parse({
       ...legacyBundle,
       assertions: [
         {

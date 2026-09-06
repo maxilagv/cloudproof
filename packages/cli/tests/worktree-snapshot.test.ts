@@ -13,11 +13,11 @@ function git(cwd: string, args: string[]): string {
 }
 
 function repository(): string {
-  const cwd = mkdtempSync(join(tmpdir(), "proof-worktree-test-"));
+  const cwd = mkdtempSync(join(tmpdir(), "cloudproof-worktree-test-"));
   repositories.push(cwd);
   git(cwd, ["init", "-q"]);
-  git(cwd, ["config", "user.name", "Proof Tests"]);
-  git(cwd, ["config", "user.email", "proof-tests@example.com"]);
+  git(cwd, ["config", "user.name", "CloudProof Tests"]);
+  git(cwd, ["config", "user.email", "cloudproof-tests@example.com"]);
   writeFileSync(join(cwd, "tracked.txt"), "base\n", "utf-8");
   git(cwd, ["add", "."]);
   git(cwd, ["commit", "-q", "-m", "base"]);
@@ -72,7 +72,7 @@ describe("createWorktreeSnapshot", () => {
     const baseSha = git(cwd, ["rev-parse", "HEAD"]);
     writeFileSync(join(cwd, "tracked.txt"), "candidate\n", "utf-8");
     writeFileSync(
-      join(cwd, "proof.config.ts"),
+      join(cwd, "cloudproof.config.ts"),
       `export default {
   services: { api: { kind: "node", path: "." } },
   data: { postgres: { kind: "postgres" } },

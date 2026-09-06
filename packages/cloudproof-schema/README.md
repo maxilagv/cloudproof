@@ -1,17 +1,17 @@
-# @proof/schema
+# @cloudproof/schema
 
-Contrato Zod del **Proof Bundle**, el recibo estructurado que producen y
-consumen Proof, la CLI, MCP y las integraciones de CI.
+Contrato Zod del **CloudProof Bundle**, el recibo estructurado que producen y
+consumen CloudProof, la CLI, MCP y las integraciones de CI.
 
 ## Compatibilidad
 
-- `ProofBundleV1Schema` conserva el contrato histórico y acepta Bundles v1
+- `CloudProofBundleV1Schema` conserva el contrato histórico y acepta Bundles v1
   anteriores, incluido el default `nextActions: []`.
-- `ProofBundleV2Schema` es el contrato estricto para productores nuevos.
-- `ProofBundleSchema` es el lector compatible: acepta v1 o v2.
-- `ProofBundle`, `Assertion` y `Provenance` son uniones compatibles para los
+- `CloudProofBundleV2Schema` es el contrato estricto para productores nuevos.
+- `CloudProofBundleSchema` es el lector compatible: acepta v1 o v2.
+- `CloudProofBundle`, `Assertion` y `Provenance` son uniones compatibles para los
   consumidores actuales; un productor nuevo debe elegir explícitamente
-  `ProofBundleV1` o `ProofBundleV2`.
+  `CloudProofBundleV1` o `CloudProofBundleV2`.
 
 La lista compartida de estados ya contiene la matriz completa: `A0_S0`,
 `A1_S0`, migración, `A0_S1`, coexistencia A0/A1 sobre S1, `A1_S1`, rollback
@@ -24,7 +24,7 @@ de A0 después de escrituras de A1, builds y efectos SQL.
 - referencias de evidencia content-addressed, nunca blobs o logs inline;
 - reproducción por referencia redactada (v2 no incrusta requests ni headers);
 - clasificación, política y contadores de redacción, más retención;
-- `issuedAt`/`expiresAt` y `getProofBundleFreshness()`;
+- `issuedAt`/`expiresAt` y `getCloudProofBundleFreshness()`;
 - matriz de release explícita y relacionada con assertions/evidencia;
 - approvals con actor, alcance, vencimiento, ticket y attestation;
 - envelopes DSSE o firmas detached estructuralmente validadas.
@@ -37,7 +37,7 @@ redacción fallida, cobertura desconocida ni un estado obligatorio sin pasar.
 
 El schema **no afirma autenticidad criptográfica**. Valida la estructura y que
 todas las attestations declaren el mismo payload digest. El payload se obtiene
-con `createProofBundleV2AttestationPayload()`: JSON canónico determinista del
+con `createCloudProofBundleV2AttestationPayload()`: JSON canónico determinista del
 Bundle sin `integrity` ni `attestations`. Un consumidor debe:
 
 1. calcular el hash indicado por `integrity.payloadDigest` sobre los bytes

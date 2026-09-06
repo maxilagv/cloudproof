@@ -1,4 +1,4 @@
-import type { ProofBundle } from "@proof/schema";
+import type { CloudProofBundle } from "@cloudproof/schema";
 
 /**
  * Ver tesis, sección 19.3 paso 10 ("Publicar Check Run y comando de
@@ -7,7 +7,7 @@ import type { ProofBundle } from "@proof/schema";
  * Apéndice E de la tesis).
  *
  * NO IMPLEMENTADO: requiere autenticación de la GitHub App (control
- * plane, repo proof-cloud) antes de poder llamar a la API real. Este
+ * plane, repo cloudproof-cloud) antes de poder llamar a la API real. Este
  * paquete solo define el mapeo de datos, no el transporte HTTP.
  */
 export interface CheckRunSummary {
@@ -16,8 +16,8 @@ export interface CheckRunSummary {
   conclusion: "success" | "failure" | "neutral";
 }
 
-export function toCheckRunSummary(bundle: ProofBundle): CheckRunSummary {
-  const conclusionMap: Record<ProofBundle["conclusion"], CheckRunSummary["conclusion"]> = {
+export function toCheckRunSummary(bundle: CloudProofBundle): CheckRunSummary {
+  const conclusionMap: Record<CloudProofBundle["conclusion"], CheckRunSummary["conclusion"]> = {
     VERIFIED: "success",
     UNSAFE: "failure",
     INCONCLUSIVE: "neutral",
@@ -26,7 +26,7 @@ export function toCheckRunSummary(bundle: ProofBundle): CheckRunSummary {
   const failedAssertions = bundle.assertions.filter((a) => a.result === "fail");
 
   return {
-    title: `RELEASE PROOF: ${bundle.conclusion}`,
+    title: `RELEASE CLOUDPROOF: ${bundle.conclusion}`,
     summary:
       failedAssertions.length === 0
         ? "Todas las afirmaciones obligatorias pasaron."
@@ -36,5 +36,5 @@ export function toCheckRunSummary(bundle: ProofBundle): CheckRunSummary {
 }
 
 export async function publishCheckRun(_summary: CheckRunSummary): Promise<void> {
-  throw new Error("publishCheckRun: no implementado (requiere GitHub App, ver repo proof-cloud, Fase 2)");
+  throw new Error("publishCheckRun: no implementado (requiere GitHub App, ver repo cloudproof-cloud, Fase 2)");
 }

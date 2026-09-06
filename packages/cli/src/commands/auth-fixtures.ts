@@ -7,7 +7,7 @@ import {
 /**
  * Fixtures de identidad HTTP generados desde OpenAPI (informe Lubrisur
  * 2026-07: "no puede completar pruebas de negocio autenticadas si la
- * aplicación no provee un fixture HTTP"). Proof no toca la base por diseño
+ * aplicación no provee un fixture HTTP"). CloudProof no toca la base por diseño
  * — la identidad se crea por la MISMA superficie HTTP observada — así que
  * la mejora es bajar el costo de preparar ese fixture a casi cero:
  *
@@ -15,10 +15,10 @@ import {
  *    registro/login y la propiedad token declarada en la respuesta del
  *    login. Nada se inventa: sin esa evidencia no se genera script y el
  *    hueco se reporta como gap accionable.
- *  - `renderAuthFixtureScript` emite un proof.fixtures.mjs editable que
- *    cumple el contrato de fixtures.beforeAll: llama por PROOF_BASE_URL
+ *  - `renderAuthFixtureScript` emite un cloudproof.fixtures.mjs editable que
+ *    cumple el contrato de fixtures.beforeAll: llama por CLOUDPROOF_BASE_URL
  *    (los exchanges quedan como prefijo replayable) y exporta AUTH_TOKEN
- *    vía PROOF_FIXTURE_ENV. Falla cerrado: cualquier respuesta no-2xx o un
+ *    vía CLOUDPROOF_FIXTURE_ENV. Falla cerrado: cualquier respuesta no-2xx o un
  *    token ausente abortan la corrida con instrucción concreta.
  */
 
@@ -183,7 +183,7 @@ export function planAuthFixtures(document: OpenApiDocument): AuthFixturePlan {
   if (login === undefined) {
     gaps.push(
       `${authOperations} operación(es) declaran seguridad pero el spec no expone un POST público de login con un token en la respuesta; ` +
-        "escribí fixtures.beforeAll a mano (contrato: crear identidad vía PROOF_BASE_URL y exportar AUTH_TOKEN en PROOF_FIXTURE_ENV). " +
+        "escribí fixtures.beforeAll a mano (contrato: crear identidad vía CLOUDPROOF_BASE_URL y exportar AUTH_TOKEN en CLOUDPROOF_FIXTURE_ENV). " +
         "Si la app no tiene registro público, sembrá la identidad con fixtures.bootstrapSql (un .sql aplicado tras las migraciones, antes del workload).",
     );
     return { authOperations, gaps };
@@ -194,7 +194,7 @@ export function planAuthFixtures(document: OpenApiDocument): AuthFixturePlan {
     registerCandidate === undefined ? undefined : jsonBodyOf(document, registerCandidate.operation);
   if (registerCandidate === undefined) {
     gaps.push(
-      `El spec no declara un POST público de registro; proof.fixtures.mjs asume que las credenciales de ${login.path} ya existen. ` +
+      `El spec no declara un POST público de registro; cloudproof.fixtures.mjs asume que las credenciales de ${login.path} ya existen. ` +
         "Creá el usuario semilla con fixtures.bootstrapSql (INSERT con hash literal, aplicado tras las migraciones) y usá esas credenciales en el login del fixture.",
     );
   }
@@ -231,7 +231,7 @@ function tokenAccessExpression(tokenProperty: string): string {
 /**
  * Script Node autocontenido para fixtures.beforeAll. Solo se llama cuando el
  * plan tiene login + tokenProperty (evidencia completa); el contrato con el
- * ejecutor es PROOF_BASE_URL + PROOF_FIXTURE_ENV.
+ * ejecutor es CLOUDPROOF_BASE_URL + CLOUDPROOF_FIXTURE_ENV.
  */
 export function renderAuthFixtureScript(plan: AuthFixturePlan, specPath: string): string {
   const login = plan.login;
@@ -241,21 +241,21 @@ export function renderAuthFixtureScript(plan: AuthFixturePlan, specPath: string)
   }
   const steps = [...(plan.register === undefined ? [] : [plan.register])];
   return `#!/usr/bin/env node
-// Generado por "proof init" desde ${specPath}.
+// Generado por "cloudproof init" desde ${specPath}.
 // Contrato de fixtures.beforeAll (identidad y datos efímeros ANTES del workload):
-//  - Toda preparación pasa por PROOF_BASE_URL (el proxy de captura de Proof):
+//  - Toda preparación pasa por CLOUDPROOF_BASE_URL (el proxy de captura de CloudProof):
 //    los exchanges quedan grabados como prefijo replayable de cada celda.
 //  - Las variables para el workload (AUTH_TOKEN) se exportan escribiendo
-//    líneas KEY=VALUE en el archivo apuntado por PROOF_FIXTURE_ENV.
+//    líneas KEY=VALUE en el archivo apuntado por CLOUDPROOF_FIXTURE_ENV.
 //  - Nunca toca la base de datos: las escrituras deben ser HTTP observables.
 // Es un punto de partida EDITABLE: ajustá cuerpos y rutas a tu negocio.
 
 import { appendFileSync } from "node:fs";
 
-const base = process.env.PROOF_BASE_URL;
-const envFile = process.env.PROOF_FIXTURE_ENV;
+const base = process.env.CLOUDPROOF_BASE_URL;
+const envFile = process.env.CLOUDPROOF_FIXTURE_ENV;
 if (!base || !envFile) {
-  console.error("PROOF_BASE_URL y PROOF_FIXTURE_ENV son obligatorios (los inyecta proof release verify).");
+  console.error("CLOUDPROOF_BASE_URL y CLOUDPROOF_FIXTURE_ENV son obligatorios (los inyecta cloudproof release verify).");
   process.exit(1);
 }
 
@@ -294,7 +294,7 @@ const session = await call(${JSON.stringify(login)});
 const token = ${tokenAccessExpression(tokenProperty)};
 if (typeof token !== "string" || token === "") {
   console.error(
-    "La respuesta de ${login.path} no trajo la propiedad '${tokenProperty}' esperada; ajustá proof.fixtures.mjs a la forma real de la respuesta.",
+    "La respuesta de ${login.path} no trajo la propiedad '${tokenProperty}' esperada; ajustá cloudproof.fixtures.mjs a la forma real de la respuesta.",
   );
   process.exit(1);
 }

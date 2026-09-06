@@ -31,8 +31,8 @@ jobs:
     needs: quality
     timeout-minutes: 35
     env:
-      PROOF_DOCKER_IT: "1"
-      PROOF_DOCKER_IT_FULL: "1"
+      CLOUDPROOF_DOCKER_IT: "1"
+      CLOUDPROOF_DOCKER_IT_FULL: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +49,6 @@ jobs:
       - run: pnpm build
       # Secuencial: estas suites verifican labels/limpieza global y no deben
       # barrer los recursos efímeros de otra suite en paralelo.
-      - run: pnpm --filter @proof/docker-executor exec vitest run tests/integration.test.ts --no-file-parallelism
-      - run: pnpm --filter @proof/cli exec vitest run tests/e2e.test.ts --no-file-parallelism
-      - run: pnpm --filter @proof/cli exec vitest run tests/reproduce.integration.test.ts --no-file-parallelism
+      - run: pnpm --filter @cloudproof/docker-executor exec vitest run tests/integration.test.ts --no-file-parallelism
+      - run: pnpm --filter @cloudproof/cli exec vitest run tests/e2e.test.ts --no-file-parallelism
+      - run: pnpm --filter @cloudproof/cli exec vitest run tests/reproduce.integration.test.ts --no-file-parallelism

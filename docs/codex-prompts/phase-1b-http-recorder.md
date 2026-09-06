@@ -1,6 +1,6 @@
 # Prompt para Codex — Subfase 1.B (motor de captura/replay HTTP)
 
-Correr con Codex parado en la raíz del repo `proof` (`C:\Users\User\OneDrive\Desktop\proof`).
+Correr con Codex parado en la raíz del repo `cloudproof` (`C:\Users\User\OneDrive\Desktop\cloudproof`).
 
 ```xml
 <task>
@@ -70,8 +70,8 @@ de prueba, grabe requests contra ella con Recorder, y los reproduzca con
 Replayer contra la misma app sin cambios — confirmá matches:true en el
 100% de los casos. Agregá un segundo test donde la respuesta candidata
 difiere (ej. un campo distinto) y confirmá matches:false. Corré
-"pnpm --filter @proof/http-recorder typecheck" y
-"pnpm --filter @proof/http-recorder test" y confirmá que ambos pasan
+"pnpm --filter @cloudproof/http-recorder typecheck" y
+"pnpm --filter @cloudproof/http-recorder test" y confirmá que ambos pasan
 antes de reportar terminado.
 </verification_loop>
 
@@ -81,13 +81,13 @@ Alcance: solo packages/http-recorder. No toques packages/docker-executor
 toques packages/postgres-verifier/src/verify.ts salvo que descubras un
 mismatch real de tipos con lo que ya expone types.ts (en ese caso,
 avisalo en el output en vez de cambiarlo silenciosamente), y no toques
-packages/proof-schema. No agregues dependencias de orquestación Docker
+packages/cloudproof-schema. No agregues dependencias de orquestación Docker
 ni nada que se superponga con la Subfase 1.A.
 </action_safety>
 
 <missing_context_gating>
 No asumas un framework de testing específico del usuario final (Jest,
-Vitest, etc. del repo que use Proof) — el mecanismo de captura tiene que
+Vitest, etc. del repo que use CloudProof) — el mecanismo de captura tiene que
 ser agnóstico a eso. Si para la decisión de diseño hace falta información
 que no está en los documentos listados arriba, decilo explícitamente en
 vez de asumirla.

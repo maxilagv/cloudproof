@@ -30,7 +30,7 @@ export class WorktreeManager {
     // árbol/metadatos idénticos). Separar el cache por repo evita reutilizar
     // un worktree válido pero perteneciente a otro proyecto.
     const repoKey = createHash("sha256").update(resolve(repoRoot)).digest("hex").slice(0, 16);
-    this.baseDir = baseDir ?? join(tmpdir(), "proof-worktrees", repoKey);
+    this.baseDir = baseDir ?? join(tmpdir(), "cloudproof-worktrees", repoKey);
   }
 
   /** Devuelve un directorio con el repo checkouteado exactamente en `sha`. */
@@ -151,10 +151,10 @@ export interface WorkingTreeSnapshot {
  * worktrees por SHA se reutiliza entre corridas consecutivas sin commit.
  */
 const SNAPSHOT_ENV = {
-  GIT_AUTHOR_NAME: "Proof",
-  GIT_AUTHOR_EMAIL: "snapshot@proof.dev",
-  GIT_COMMITTER_NAME: "Proof",
-  GIT_COMMITTER_EMAIL: "snapshot@proof.dev",
+  GIT_AUTHOR_NAME: "CloudProof",
+  GIT_AUTHOR_EMAIL: "snapshot@cloudproof.dev",
+  GIT_COMMITTER_NAME: "CloudProof",
+  GIT_COMMITTER_EMAIL: "snapshot@cloudproof.dev",
   GIT_AUTHOR_DATE: "2005-04-07T22:13:13Z",
   GIT_COMMITTER_DATE: "2005-04-07T22:13:13Z",
 };
@@ -213,7 +213,7 @@ export async function snapshotWorkingTree(
     return { sha: parent, tree, parent, dirtyFiles };
   }
 
-  const indexDirectory = mkdtempSync(join(tmpdir(), "proof-snapshot-"));
+  const indexDirectory = mkdtempSync(join(tmpdir(), "cloudproof-snapshot-"));
   const indexEnv = { GIT_INDEX_FILE: join(indexDirectory, "index") };
   try {
     await git(["read-tree", "HEAD"], indexEnv);
@@ -227,7 +227,7 @@ export async function snapshotWorkingTree(
           "-p",
           parent,
           "-m",
-          "proof: working-tree snapshot (cambios sin commit)",
+          "cloudproof: working-tree snapshot (cambios sin commit)",
         ],
         { ...indexEnv, ...SNAPSHOT_ENV },
       ),

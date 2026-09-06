@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ProjectConfig } from "@proof/config";
-import type { ProofBundle } from "@proof/schema";
+import type { ProjectConfig } from "@cloudproof/config";
+import type { CloudProofBundle } from "@cloudproof/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   AssertionAmbiguousError,
@@ -20,13 +20,13 @@ import {
 const temporaryRoots: string[] = [];
 
 function temporaryRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "proof-reproduce-unit-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-reproduce-unit-"));
   temporaryRoots.push(root);
-  mkdirSync(join(root, ".proof"), { recursive: true });
+  mkdirSync(join(root, ".cloudproof"), { recursive: true });
   return root;
 }
 
-function bundle(baseSha = "base-sha", headSha = "head-sha"): ProofBundle {
+function bundle(baseSha = "base-sha", headSha = "head-sha"): CloudProofBundle {
   return {
     version: "1",
     subject: { baseSha, headSha },
@@ -43,8 +43,8 @@ function bundle(baseSha = "base-sha", headSha = "head-sha"): ProofBundle {
   };
 }
 
-function writeBundle(root: string, filename: string, value: ProofBundle): string {
-  const path = join(root, ".proof", filename);
+function writeBundle(root: string, filename: string, value: CloudProofBundle): string {
+  const path = join(root, ".cloudproof", filename);
   writeFileSync(path, JSON.stringify(value), "utf-8");
   return path;
 }
@@ -70,7 +70,7 @@ function fakeExecutor(runId: string, state: FakeState): ReproductionExecutor {
     runId,
     async buildImage(spec) {
       state.calls.push({ operation: "buildImage", value: spec });
-      return "proof-app:base";
+      return "cloudproof-app:base";
     },
     async startEphemeralPostgres(spec) {
       state.calls.push({ operation: "startEphemeralPostgres", value: spec });
@@ -78,9 +78,9 @@ function fakeExecutor(runId: string, state: FakeState): ReproductionExecutor {
       const isS0 = postgresCount === 1;
       return {
         id: isS0 ? "postgres-s0-id" : "postgres-s1-id",
-        serviceName: isS0 ? "proof-pg-s0" : "proof-pg-s1",
-        connectionUrl: `postgresql://proof:proof@proof-pg-${isS0 ? "s0" : "s1"}:5432/proof`,
-        hostConnectionUrl: `postgresql://proof:proof@127.0.0.1:${isS0 ? "55431" : "55432"}/proof`,
+        serviceName: isS0 ? "cloudproof-pg-s0" : "cloudproof-pg-s1",
+        connectionUrl: `postgresql://cloudproof:cloudproof@cloudproof-pg-${isS0 ? "s0" : "s1"}:5432/cloudproof`,
+        hostConnectionUrl: `postgresql://cloudproof:cloudproof@127.0.0.1:${isS0 ? "55431" : "55432"}/cloudproof`,
       };
     },
     async startApp(imageTag, env) {
@@ -90,7 +90,7 @@ function fakeExecutor(runId: string, state: FakeState): ReproductionExecutor {
       }
       return {
         id: "app-id",
-        serviceName: "proof-app-0",
+        serviceName: "cloudproof-app-0",
         connectionUrl: "http://127.0.0.1:43123",
         containerPort: 3000,
       };
@@ -154,7 +154,7 @@ afterEach(() => {
   }
 });
 
-describe("proof reproduce", () => {
+describe("cloudproof reproduce", () => {
   it("reconstructs A0 + S1, leaves it running, and later cleans only its run", async () => {
     const root = temporaryRepo();
     const bundlePath = writeBundle(root, "release.json", bundle());
@@ -175,8 +175,8 @@ describe("proof reproduce", () => {
       servicePath: "apps/api",
       runId: "live-run",
       appUrl: "http://127.0.0.1:43123",
-      postgresUrl: "postgresql://proof:proof@127.0.0.1:55432/proof",
-      cleanupCommand: 'proof reproduce "postgres.old-app-new-schema.0" --cleanup',
+      postgresUrl: "postgresql://cloudproof:cloudproof@127.0.0.1:55432/cloudproof",
+      cleanupCommand: 'cloudproof reproduce "postgres.old-app-new-schema.0" --cleanup',
     });
     expect(state.calls).toEqual([
       {
@@ -200,14 +200,14 @@ describe("proof reproduce", () => {
         operation: "exportPostgres",
         value: {
           containerId: "postgres-s1-id",
-          destinationPath: expect.stringMatching(/\.proof[\\/]reproductions[\\/].+\.sql$/),
+          destinationPath: expect.stringMatching(/\.cloudproof[\\/]reproductions[\\/].+\.sql$/),
         },
       },
       {
         operation: "startApp",
         value: {
-          imageTag: "proof-app:base",
-          env: { DATABASE_URL: "postgresql://proof:proof@proof-pg-s1:5432/proof" },
+          imageTag: "cloudproof-app:base",
+          env: { DATABASE_URL: "postgresql://cloudproof:cloudproof@cloudproof-pg-s1:5432/cloudproof" },
         },
       },
       { operation: "teardown", value: "postgres-s0-id" },
@@ -218,7 +218,7 @@ describe("proof reproduce", () => {
     const compose = readFileSync(started.composePath, "utf-8");
     expect(compose).toContain("internal: true");
     expect(compose).toContain("proxy:");
-    expect(compose).toContain("networks: [proof_internal, proof_access]");
+    expect(compose).toContain("networks: [cloudproof_internal, cloudproof_access]");
     expect(existsSync(started.sqlSnapshotPath)).toBe(true);
 
     const manifestPath = reproductionManifestPath("postgres.old-app-new-schema.0", root);
@@ -272,7 +272,7 @@ describe("proof reproduce", () => {
     );
   });
 
-  it("refuses to guess a service when proof.config.ts contains more than one", async () => {
+  it("refuses to guess a service when cloudproof.config.ts contains more than one", async () => {
     const root = temporaryRepo();
     writeBundle(root, "release.json", bundle());
     const state: FakeState = { calls: [], createdWith: [] };
@@ -306,7 +306,7 @@ describe("proof reproduce", () => {
       findAssertionContext(
         "postgres.old-app-new-schema.0",
         root,
-        join(".proof", "first.json"),
+        join(".cloudproof", "first.json"),
       ),
     ).toMatchObject({
       subject: { baseSha: "base-1", headSha: "head-1" },

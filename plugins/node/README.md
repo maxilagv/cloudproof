@@ -1,3 +1,3 @@
-# @proof/plugin-node
+# @cloudproof/plugin-node
 
-Detector de stack Node.js/TypeScript para `proof init`/`proof doctor`. Busca `package.json` y `tsconfig.json` en la raíz del proyecto.
+Detector de stack Node.js/TypeScript para `cloudproof init`/`cloudproof doctor`. Busca `package.json` y `tsconfig.json` en la raíz del proyecto.

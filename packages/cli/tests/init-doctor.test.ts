@@ -9,7 +9,7 @@ import {
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadConfig } from "@proof/config";
+import { loadConfig } from "@cloudproof/config";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { doctorExitCode, runDoctor, trackedSecretCandidates } from "../src/commands/doctor.js";
 import { runInit } from "../src/commands/init.js";
@@ -17,7 +17,7 @@ import { runInit } from "../src/commands/init.js";
 const roots: string[] = [];
 
 function repo(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "proof-init-doctor-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-init-doctor-"));
   roots.push(root);
   for (const [relativePath, contents] of Object.entries(files)) {
     const absolutePath = join(root, relativePath);
@@ -32,8 +32,8 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("proof init", () => {
-  it("detecta Prisma/Postgres en monorepo y genera un config cargable sin @proof/config", async () => {
+describe("cloudproof init", () => {
+  it("detecta Prisma/Postgres en monorepo y genera un config cargable sin @cloudproof/config", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": JSON.stringify({
@@ -61,8 +61,8 @@ describe("proof init", () => {
       command: "pnpm",
       args: ["run", "test:e2e"],
     });
-    expect(readFileSync(join(root, "proof.config.ts"), "utf-8")).not.toMatch(
-      /from\s+["']@proof\/config["']/,
+    expect(readFileSync(join(root, "cloudproof.config.ts"), "utf-8")).not.toMatch(
+      /from\s+["']@cloudproof\/config["']/,
     );
   });
 
@@ -240,13 +240,13 @@ describe("proof init", () => {
     const original = "export default { custom: true };\n";
     const root = repo({
       "package.json": "{}",
-      "proof.config.ts": original,
+      "cloudproof.config.ts": original,
     });
 
     const result = await runInit({ cwd: root });
 
     expect(result.configWritten).toBe(false);
-    expect(readFileSync(join(root, "proof.config.ts"), "utf-8")).toBe(original);
+    expect(readFileSync(join(root, "cloudproof.config.ts"), "utf-8")).toBe(original);
   });
 
   it("genera AGENTS.md con la regla de verificación para agentes (tesis 8.2, I-012)", async () => {
@@ -257,11 +257,11 @@ describe("proof init", () => {
     const agents = readFileSync(join(root, "AGENTS.md"), "utf-8");
 
     expect(result.agentsResult).toBe("created");
-    expect(agents).toContain("<!-- proof:agents:begin -->");
-    expect(agents).toContain("<!-- proof:agents:end -->");
-    expect(agents).toContain("proof release plan --base-sha");
-    expect(agents).toContain("proof release verify");
-    expect(agents).toContain("proof_release_verify");
+    expect(agents).toContain("<!-- cloudproof:agents:begin -->");
+    expect(agents).toContain("<!-- cloudproof:agents:end -->");
+    expect(agents).toContain("cloudproof release plan --base-sha");
+    expect(agents).toContain("cloudproof release verify");
+    expect(agents).toContain("cloudproof_release_verify");
     expect(agents).toContain("`VERIFIED`");
     expect(agents).toContain("`UNSAFE`");
     expect(agents).toContain("`INCONCLUSIVE`");
@@ -295,14 +295,14 @@ describe("proof init", () => {
 
     expect(appended.agentsResult).toBe("updated");
     expect(afterAppend).toContain("Usar siempre pnpm.");
-    expect(afterAppend.indexOf("<!-- proof:agents:begin -->")).toBeGreaterThan(
+    expect(afterAppend.indexOf("<!-- cloudproof:agents:begin -->")).toBeGreaterThan(
       afterAppend.indexOf("Usar siempre pnpm."),
     );
 
     // Simular una edición del bloque gestionado: re-init lo restaura sin tocar el resto.
     writeFileSync(
       join(root, "AGENTS.md"),
-      afterAppend.replace("proof release plan --base-sha", "COMANDO EDITADO"),
+      afterAppend.replace("cloudproof release plan --base-sha", "COMANDO EDITADO"),
       "utf-8",
     );
     const restored = await runInit({ cwd: root });
@@ -310,13 +310,13 @@ describe("proof init", () => {
 
     expect(restored.agentsResult).toBe("updated");
     expect(afterRestore).toContain("Usar siempre pnpm.");
-    expect(afterRestore).toContain("proof release plan --base-sha");
+    expect(afterRestore).toContain("cloudproof release plan --base-sha");
     expect(afterRestore).not.toContain("COMANDO EDITADO");
-    expect(afterRestore.match(/proof:agents:begin/g)).toHaveLength(1);
+    expect(afterRestore.match(/cloudproof:agents:begin/g)).toHaveLength(1);
   });
 });
 
-describe("proof doctor", () => {
+describe("cloudproof doctor", () => {
   it("usa exit 1 para findings HIGH/CRITICAL y 0 para diagnósticos menores", () => {
     expect(doctorExitCode([{ severity: "HIGH", message: "falta Dockerfile" }])).toBe(1);
     expect(doctorExitCode([{ severity: "CRITICAL", message: "Docker no responde" }])).toBe(1);
@@ -331,7 +331,7 @@ describe("proof doctor", () => {
       Dockerfile: "FROM node:20-alpine\nRUN apk add --no-cache openssl\n",
       "prisma/schema.prisma":
         'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
-      "proof.config.ts": `export default {
+      "cloudproof.config.ts": `export default {
   services: { api: { kind: "node", path: ".", port: 3000 } },
   data: { postgres: { kind: "postgres", version: 16 } },
   flows: [],
@@ -350,7 +350,7 @@ describe("proof doctor", () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": "{}",
-      "proof.config.ts": `export default {
+      "cloudproof.config.ts": `export default {
   services: { api: { kind: "node", path: "missing" } },
   data: { postgres: { kind: "postgres", version: 16 } },
   flows: [],
@@ -371,7 +371,7 @@ describe("proof doctor", () => {
     expect(messages).toContain("No se declaró workload");
     expect(messages).toContain("No se declaró coverage.requiredRoutes");
     expect(messages).toContain("Approval expirada");
-    expect(existsSync(join(root, "proof.config.ts"))).toBe(true);
+    expect(existsSync(join(root, "cloudproof.config.ts"))).toBe(true);
   });
 
   it("acepta services.<n>.dockerfile custom y el layout multi-archivo de Prisma", async () => {
@@ -381,7 +381,7 @@ describe("proof doctor", () => {
       "docker/Dockerfile.web": "FROM node:20\n",
       "prisma/schema/main.prisma":
         'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
-      "proof.config.ts": `export default {
+      "cloudproof.config.ts": `export default {
   services: { web: { kind: "node", path: ".", dockerfile: "docker/Dockerfile.web" } },
   data: { postgres: { kind: "postgres", version: 16 } },
   flows: [],
@@ -403,7 +403,7 @@ describe("proof doctor", () => {
       "docker/Dockerfile.api": "FROM node:20\n",
       "prisma/schema.prisma":
         'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
-      "proof.config.ts": `export default {
+      "cloudproof.config.ts": `export default {
   services: { api: { kind: "node", path: "." } },
   data: { postgres: { kind: "postgres", version: 16 } },
   flows: [],
@@ -424,7 +424,7 @@ describe("proof doctor", () => {
   });
 });
 
-describe("proof doctor env relevance", () => {
+describe("cloudproof doctor env relevance", () => {
   it("prioriza variables usadas por verify y resume las ajenas sin listarlas", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const unrelated = Array.from({ length: 23 }, (_, index) => `UNRELATED_${index}=x`).join("\n");
@@ -435,8 +435,8 @@ describe("proof doctor env relevance", () => {
       "src/index.ts": "export const token = process.env.RUNTIME_TOKEN;\n",
       "prisma/schema.prisma":
         'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
-      "scripts/e2e.mjs": "fetch(process.env.PROOF_BASE_URL + '/orders');\n",
-      "proof.config.ts": `export default {
+      "scripts/e2e.mjs": "fetch(process.env.CLOUDPROOF_BASE_URL + '/orders');\n",
+      "cloudproof.config.ts": `export default {
   services: { api: { kind: "node", path: "." } },
   data: { postgres: { kind: "postgres", version: 16 } },
   flows: [],
@@ -461,7 +461,7 @@ describe("proof doctor env relevance", () => {
   });
 });
 
-describe("proof doctor — chequeos de infraestructura (informe 2026-07-18)", () => {
+describe("cloudproof doctor — chequeos de infraestructura (informe 2026-07-18)", () => {
   it("trackedSecretCandidates marca .env y llaves privadas, no las plantillas", () => {
     expect(
       trackedSecretCandidates([

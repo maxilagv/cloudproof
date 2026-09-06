@@ -10,7 +10,7 @@ import type {
   DockerExecutor,
   EphemeralPostgresSpec,
   RunningContainer,
-} from "@proof/docker-executor";
+} from "@cloudproof/docker-executor";
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyRelease } from "../dist/index.js";
 
@@ -40,11 +40,11 @@ function git(cwd: string, args: string[]): string {
 
 /** Repo git real y efímero: planRelease (dentro de verify) exige git. */
 function repository(files: Record<string, string> = {}): { cwd: string; sha: string } {
-  const cwd = mkdtempSync(join(tmpdir(), "proof-bsas-"));
+  const cwd = mkdtempSync(join(tmpdir(), "cloudproof-bsas-"));
   repositories.push(cwd);
   git(cwd, ["init", "-q"]);
-  git(cwd, ["config", "user.name", "Proof Tests"]);
-  git(cwd, ["config", "user.email", "proof-tests@example.com"]);
+  git(cwd, ["config", "user.name", "CloudProof Tests"]);
+  git(cwd, ["config", "user.email", "cloudproof-tests@example.com"]);
   writeFileSync(join(cwd, "README.md"), "bsas\n", "utf-8");
   for (const [name, contents] of Object.entries(files)) {
     writeFileSync(join(cwd, name), contents, "utf-8");
@@ -151,8 +151,8 @@ function harness(): Harness {
 
   const workload: CommandRunner = {
     async run(_command, _args, runOptions) {
-      const baseUrl = runOptions?.env?.["PROOF_BASE_URL"];
-      if (baseUrl === undefined) throw new Error("missing PROOF_BASE_URL");
+      const baseUrl = runOptions?.env?.["CLOUDPROOF_BASE_URL"];
+      if (baseUrl === undefined) throw new Error("missing CLOUDPROOF_BASE_URL");
       const write = await fetch(`${baseUrl}/orders`, { method: "POST" });
       const read = await fetch(`${baseUrl}/orders`);
       return {
@@ -167,8 +167,8 @@ function harness(): Harness {
 
 describe("fixtures.bootstrapSql (identidad sin signup público)", () => {
   it("aplica el bootstrap SOLO al seed S0, lo digesta en el Bundle y no rompe VERIFIED", async () => {
-    const seedSql = "INSERT INTO users (email, password_hash) VALUES ('seed@proof', '$2b$10$hash');\n";
-    const { cwd, sha } = repository({ "proof.seed.sql": seedSql });
+    const seedSql = "INSERT INTO users (email, password_hash) VALUES ('seed@cloudproof', '$2b$10$hash');\n";
+    const { cwd, sha } = repository({ "cloudproof.seed.sql": seedSql });
     const scenario = harness();
 
     const bundle = await verifyRelease(
@@ -179,7 +179,7 @@ describe("fixtures.bootstrapSql (identidad sin signup público)", () => {
         servicePath: ".",
         runner: "unit",
         cwd,
-        bootstrapSql: "proof.seed.sql",
+        bootstrapSql: "cloudproof.seed.sql",
         workload: { command: "test-workload" },
         requiredRoutes: ["POST /orders"],
         approvals: [],
@@ -201,7 +201,7 @@ describe("fixtures.bootstrapSql (identidad sin signup público)", () => {
     const withBootstrap = scenario.postgresSpecs.filter((spec) => spec.bootstrapSql !== undefined);
     expect(withBootstrap).toHaveLength(1);
     expect(withBootstrap[0]?.cloneFromContainerId).toBeUndefined();
-    expect(withBootstrap[0]?.bootstrapSql).toContain("proof.seed.sql");
+    expect(withBootstrap[0]?.bootstrapSql).toContain("cloudproof.seed.sql");
   });
 
   it("un bootstrap declarado pero ilegible corta ANTES de gastar Docker, con evidencia clara", async () => {
@@ -216,7 +216,7 @@ describe("fixtures.bootstrapSql (identidad sin signup público)", () => {
         servicePath: ".",
         runner: "unit",
         cwd,
-        bootstrapSql: "proof.seed.sql",
+        bootstrapSql: "cloudproof.seed.sql",
         workload: { command: "test-workload" },
         requiredRoutes: ["POST /orders"],
         approvals: [],

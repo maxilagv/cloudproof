@@ -1,8 +1,8 @@
-import type { ProofBundle } from "@proof/schema";
+import type { CloudProofBundle } from "@cloudproof/schema";
 import { describe, expect, it } from "vitest";
 import { evaluatePolicies, getPolicy, UnknownPolicyError } from "../dist/index.js";
 
-function bundle(approved: boolean): ProofBundle {
+function bundle(approved: boolean): CloudProofBundle {
   return {
     version: "1",
     subject: { baseSha: "base", headSha: "head" },

@@ -1,4 +1,4 @@
-import type { Assertion, ExecutionState, Remediation, RemediationStep } from "@proof/schema";
+import type { Assertion, ExecutionState, Remediation, RemediationStep } from "@cloudproof/schema";
 
 /**
  * Catálogo determinista de recetas expand/contract (tesis 7.6 y demo

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadConfig } from "@proof/config";
+import { loadConfig } from "@cloudproof/config";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runDoctor } from "../src/commands/doctor.js";
 import { runInit } from "../src/commands/init.js";
@@ -15,7 +15,7 @@ import { runInit } from "../src/commands/init.js";
 const roots: string[] = [];
 
 function repo(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "proof-lubrisur-"));
+  const root = mkdtempSync(join(tmpdir(), "cloudproof-lubrisur-"));
   roots.push(root);
   for (const [relativePath, contents] of Object.entries(files)) {
     const absolutePath = join(root, relativePath);
@@ -91,20 +91,20 @@ describe("init — cliente Prisma generado (fallo 1 del informe)", () => {
   });
 });
 
-describe("init — .gitignore de .proof/ (fallo 3 del informe)", () => {
-  it("crea .gitignore con .proof/ cuando no existe y es idempotente", async () => {
+describe("init — .gitignore de .cloudproof/ (fallo 3 del informe)", () => {
+  it("crea .gitignore con .cloudproof/ cuando no existe y es idempotente", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({ "package.json": "{}" });
 
     const first = await runInit({ cwd: root });
     expect(first.gitignoreResult).toBe("created");
-    expect(readFileSync(join(root, ".gitignore"), "utf-8")).toContain(".proof/");
+    expect(readFileSync(join(root, ".gitignore"), "utf-8")).toContain(".cloudproof/");
 
     const second = await runInit({ cwd: root });
     expect(second.gitignoreResult).toBe("unchanged");
   });
 
-  it("agrega .proof/ a un .gitignore existente sin tocar el contenido del usuario", async () => {
+  it("agrega .cloudproof/ a un .gitignore existente sin tocar el contenido del usuario", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": "{}",
@@ -117,7 +117,7 @@ describe("init — .gitignore de .proof/ (fallo 3 del informe)", () => {
     expect(result.gitignoreResult).toBe("updated");
     expect(contents).toContain("node_modules/");
     expect(contents).toContain(".env");
-    expect(contents).toContain(".proof/");
+    expect(contents).toContain(".cloudproof/");
   });
 });
 
@@ -193,7 +193,7 @@ const OPENAPI_WITH_AUTH = JSON.stringify({
 });
 
 describe("init — fixtures de identidad HTTP (fallo 5 del informe)", () => {
-  it("scaffoldea proof.fixtures.mjs desde la evidencia del spec y lo declara en la config", async () => {
+  it("scaffoldea cloudproof.fixtures.mjs desde la evidencia del spec y lo declara en la config", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": "{}",
@@ -211,12 +211,12 @@ describe("init — fixtures de identidad HTTP (fallo 5 del informe)", () => {
     });
     expect(config.fixtures?.beforeAll).toEqual({
       command: "node",
-      args: ["proof.fixtures.mjs"],
+      args: ["cloudproof.fixtures.mjs"],
     });
 
-    const script = readFileSync(join(root, "proof.fixtures.mjs"), "utf-8");
-    expect(script).toContain("PROOF_BASE_URL");
-    expect(script).toContain("PROOF_FIXTURE_ENV");
+    const script = readFileSync(join(root, "cloudproof.fixtures.mjs"), "utf-8");
+    expect(script).toContain("CLOUDPROOF_BASE_URL");
+    expect(script).toContain("CLOUDPROOF_FIXTURE_ENV");
     expect(script).toContain("/auth/register");
     expect(script).toContain("/auth/login");
     expect(script).toContain("AUTH_TOKEN=");
@@ -238,9 +238,9 @@ describe("init — fixtures de identidad HTTP (fallo 5 del informe)", () => {
     const result = await runInit({ cwd: root });
 
     expect(result.authFixturesGenerated).toBeUndefined();
-    expect(existsSync(join(root, "proof.fixtures.mjs"))).toBe(false);
+    expect(existsSync(join(root, "cloudproof.fixtures.mjs"))).toBe(false);
     expect(
-      result.workloadGenerated?.gaps.some((gap) => gap.includes("PROOF_FIXTURE_ENV")),
+      result.workloadGenerated?.gaps.some((gap) => gap.includes("CLOUDPROOF_FIXTURE_ENV")),
     ).toBe(true);
   });
 });
@@ -263,7 +263,7 @@ describe("doctor — preflight de runtime de imagen (fallo 6 del informe)", () =
       "package.json": "{}",
       Dockerfile: 'FROM node:20-alpine\nCMD ["node", "server.js"]\n',
       "prisma/schema.prisma": LUBRISUR_SCHEMA,
-      "proof.config.ts": COMPLETE_CONFIG,
+      "cloudproof.config.ts": COMPLETE_CONFIG,
     });
 
     const findings = await runDoctor({ cwd: root, systemChecks: false });
@@ -281,7 +281,7 @@ describe("doctor — preflight de runtime de imagen (fallo 6 del informe)", () =
       Dockerfile:
         'FROM node:20-alpine\nRUN apk add --no-cache openssl\nCMD ["node", "server.js"]\n',
       "prisma/schema.prisma": LUBRISUR_SCHEMA,
-      "proof.config.ts": COMPLETE_CONFIG,
+      "cloudproof.config.ts": COMPLETE_CONFIG,
     });
 
     const findings = await runDoctor({ cwd: root, systemChecks: false });
@@ -297,7 +297,7 @@ describe("doctor — operaciones autenticadas sin fixtures (fallo 5 del informe)
       Dockerfile: "FROM node:20-bookworm\n",
       "prisma/schema.prisma": LUBRISUR_SCHEMA,
       "openapi.json": OPENAPI_WITH_AUTH,
-      "proof.config.ts": COMPLETE_CONFIG,
+      "cloudproof.config.ts": COMPLETE_CONFIG,
     });
 
     const findings = await runDoctor({ cwd: root, systemChecks: false });
@@ -307,36 +307,36 @@ describe("doctor — operaciones autenticadas sin fixtures (fallo 5 del informe)
   });
 });
 
-describe("doctor — .proof/ frente a Git (fallo 3 del informe)", () => {
+describe("doctor — .cloudproof/ frente a Git (fallo 3 del informe)", () => {
   it("evidencia versionada es HIGH; no ignorada es LOW; ignorada no reporta", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const root = repo({
       "package.json": "{}",
-      ".proof/release-verify-x.json": "{}",
+      ".cloudproof/release-verify-x.json": "{}",
     });
     git(root, ["init", "-q"]);
-    git(root, ["config", "user.name", "Proof Tests"]);
-    git(root, ["config", "user.email", "proof-tests@example.com"]);
+    git(root, ["config", "user.name", "CloudProof Tests"]);
+    git(root, ["config", "user.email", "cloudproof-tests@example.com"]);
 
     // No ignorada, sin trackear: LOW.
     const before = await runDoctor({ cwd: root, systemChecks: false });
     expect(
-      before.find((finding) => finding.message.includes(".proof/")),
+      before.find((finding) => finding.message.includes(".cloudproof/")),
     ).toMatchObject({ severity: "LOW" });
 
     // Versionada: HIGH con el fix concreto.
-    git(root, ["add", ".proof"]);
+    git(root, ["add", ".cloudproof"]);
     git(root, ["commit", "-q", "-m", "oops"]);
     const tracked = await runDoctor({ cwd: root, systemChecks: false });
     const worst = tracked.find((finding) => finding.message.includes("git rm -r --cached"));
     expect(worst).toMatchObject({ severity: "HIGH" });
 
-    // Corregida (init agrega .proof/ a .gitignore y se destrackea): silencio.
-    git(root, ["rm", "-r", "-q", "--cached", ".proof"]);
-    writeFileSync(join(root, ".gitignore"), ".proof/\n", "utf-8");
+    // Corregida (init agrega .cloudproof/ a .gitignore y se destrackea): silencio.
+    git(root, ["rm", "-r", "-q", "--cached", ".cloudproof"]);
+    writeFileSync(join(root, ".gitignore"), ".cloudproof/\n", "utf-8");
     git(root, ["add", ".gitignore"]);
-    git(root, ["commit", "-q", "-m", "ignore proof"]);
+    git(root, ["commit", "-q", "-m", "ignore cloudproof"]);
     const after = await runDoctor({ cwd: root, systemChecks: false });
-    expect(after.filter((finding) => finding.message.includes(".proof/"))).toEqual([]);
+    expect(after.filter((finding) => finding.message.includes(".cloudproof/"))).toEqual([]);
   });
 });
